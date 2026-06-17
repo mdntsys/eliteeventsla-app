@@ -178,7 +178,7 @@ function AvailabilityRow({
   );
 }
 
-/* ── Load-out manifest + "Check out all" ─────────────────────────────── */
+/* ── Bulk check-out ("Check out all") ────────────────────────────────── */
 
 function CheckOutAllButton({
   eventId,
@@ -207,62 +207,6 @@ function CheckOutAllButton({
         </p>
       )}
     </form>
-  );
-}
-
-function LoadOutSection({ ev }: { ev: EventDetail }) {
-  const manifest = ev.items;
-  const remaining = manifest.filter(
-    (line) => line.checked_out_at == null && line.returned_at == null,
-  ).length;
-
-  return (
-    <div className="mt-6">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="eyebrow">Load-out manifest</p>
-        <CheckOutAllButton eventId={ev.id} remaining={remaining} />
-      </div>
-      <ul className="divide-y divide-line overflow-hidden rounded-(--radius-card) border border-line">
-        {manifest.map((line) => {
-          const checkedOut = line.checked_out_at != null;
-          const returned = line.returned_at != null;
-          return (
-            <li
-              key={line.id}
-              className="flex items-center justify-between gap-3 bg-cream px-4 py-2.5"
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  aria-hidden
-                  className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-semibold ${
-                    checkedOut || returned
-                      ? "bg-navy text-cream"
-                      : "border border-line bg-card text-transparent"
-                  }`}
-                >
-                  ✓
-                </span>
-                <span className="truncate text-sm text-ink">
-                  {line.item_name}
-                  {line.unit_asset_tag ? (
-                    <span className="ml-2 font-mono text-xs text-muted">
-                      {line.unit_asset_tag}
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-xs text-muted">
-                      ×{line.quantity}
-                    </span>
-                  )}
-                </span>
-              </div>
-              <span className="shrink-0 text-xs text-muted">
-                {returned ? "Returned" : checkedOut ? "Loaded" : "Pending"}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
   );
 }
 
@@ -429,6 +373,11 @@ export function InventoryPanel({
   const defaultFrom = ev.start_at ? ev.start_at.slice(0, 10) : day;
   const defaultTo = ev.end_at ? ev.end_at.slice(0, 10) : day;
 
+  // Lines still in the warehouse (reservable but not yet loaded) → "Check out all".
+  const remaining = ev.items.filter(
+    (line) => line.checked_out_at == null && line.returned_at == null,
+  ).length;
+
   // Distinct inventory items reserved on this job, for the availability summary.
   const distinct = useMemo(() => {
     const map = new Map<string, string>();
@@ -444,7 +393,12 @@ export function InventoryPanel({
     <section className="rounded-(--radius-card) border border-line bg-card p-6">
       <div className="mb-5 flex items-center justify-between gap-4">
         <h2 className="font-display text-xl font-light text-navy">Inventory</h2>
-        <span className="eyebrow">{ev.items.length} reserved</span>
+        <div className="flex items-center gap-3">
+          <span className="eyebrow">{ev.items.length} reserved</span>
+          {remaining > 0 && (
+            <CheckOutAllButton eventId={ev.id} remaining={remaining} />
+          )}
+        </div>
       </div>
 
       {ev.items.length === 0 ? (
@@ -458,8 +412,6 @@ export function InventoryPanel({
           ))}
         </ul>
       )}
-
-      {ev.items.length > 0 && <LoadOutSection ev={ev} />}
 
       {distinct.length > 0 && (
         <div className="mt-6">
