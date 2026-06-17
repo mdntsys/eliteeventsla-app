@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+  Elite Events LA — internal Operations OS design system.
+  Brand tokens copied from the marketing site (../Website/src/app/globals.css)
+  so the OS reads on-brand. Palette: warm off-white ground, near-black ink for
+  body, dark navy for display + accents. Type: Cormorant Garamond (display) +
+  Hanken Grotesk (body).
+*/
+
+@theme {
+  /* Surfaces */
+  --color-cream: #f4f1ea;
+  --color-cream-deep: #ece6da;
+  --color-card: #faf8f3;
+
+  /* Ink */
+  --color-ink: #22211d; /* barely-lighter off-black, body copy */
+  --color-navy: #16263a; /* dark navy, display + accents */
+  --color-muted: #6f6a60; /* warm taupe-grey, secondary copy */
+  --color-line: #ddd7ca; /* hairline rules */
+
+  /* Type */
+  --font-serif: var(--font-display);
+  --font-sans: var(--font-hanken);
+
+  /* Editorial rhythm */
+  --tracking-eyebrow: 0.22em;
+
+  /* App radii */
+  --radius-card: 0.5rem;
+}
+
+:root {
+  --background: var(--color-cream);
+  --foreground: var(--color-ink);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv05";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-navy);
+  color: var(--color-cream);
+}
+
+/* Display serif: optical sizing on for large sizes */
+.font-display {
+  font-family: var(--font-serif), ui-serif, Georgia, serif;
+  font-optical-sizing: auto;
+}
+
+/* Wide-tracked uppercase eyebrow label */
+.eyebrow {
+  font-family: var(--font-sans), sans-serif;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--color-muted);
+}
