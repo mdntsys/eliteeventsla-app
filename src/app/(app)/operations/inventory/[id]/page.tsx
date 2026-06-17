@@ -3,11 +3,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth/dal";
 import { getInventoryItem } from "@/lib/inventory/queries";
+import { listLocationOptions } from "@/lib/locations/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { KindBadge } from "@/components/inventory/status-badge";
 import { ItemStatusControl } from "@/components/inventory/item-status-control";
+import { ItemLocationForm } from "@/components/inventory/item-location-form";
 import { UnitsPanel } from "@/components/inventory/units-panel";
 import { MaintenancePanel } from "@/components/inventory/maintenance-panel";
+import { ImageUpload } from "@/components/shared/image-upload";
 
 export const metadata: Metadata = { title: "Inventory item" };
 
@@ -17,6 +20,18 @@ function formatCurrency(value: number | null): string {
     style: "currency",
     currency: "USD",
   });
+}
+
+function formatLocation(
+  name: string | null,
+  rowLabel: string | null,
+  section: string | null,
+): string {
+  if (!name) return "—";
+  const parts = [name];
+  if (rowLabel) parts.push(`Row ${rowLabel}`);
+  if (section) parts.push(`Section ${section}`);
+  return parts.join(" · ");
 }
 
 function SummaryField({
@@ -41,7 +56,10 @@ export default async function InventoryItemPage({
 }) {
   await requireModule("operations");
   const { id } = await params;
-  const item = await getInventoryItem(id);
+  const [item, locationOptions] = await Promise.all([
+    getInventoryItem(id),
+    listLocationOptions(),
+  ]);
   if (!item) notFound();
 
   return (
@@ -77,15 +95,33 @@ export default async function InventoryItemPage({
             </div>
           </div>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <SummaryField label="SKU">{item.sku ?? "—"}</SummaryField>
-            <SummaryField label="Location">{item.location ?? "—"}</SummaryField>
-            <SummaryField label="Daily rate">
-              {formatCurrency(item.daily_rate)}
-            </SummaryField>
-            <SummaryField label="Replacement cost">
-              {formatCurrency(item.replacement_cost)}
-            </SummaryField>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+            <div>
+              <ImageUpload
+                kind="item"
+                targetId={item.id}
+                itemId={item.id}
+                currentUrl={item.image_url}
+                label="Item photo"
+              />
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <SummaryField label="SKU">{item.sku ?? "—"}</SummaryField>
+              <SummaryField label="Location">
+                {formatLocation(
+                  item.location_name,
+                  item.row_label,
+                  item.section,
+                )}
+              </SummaryField>
+              <SummaryField label="Daily rate">
+                {formatCurrency(item.daily_rate)}
+              </SummaryField>
+              <SummaryField label="Replacement cost">
+                {formatCurrency(item.replacement_cost)}
+              </SummaryField>
+            </div>
           </div>
 
           {item.kind === "bulk" && (
@@ -96,9 +132,22 @@ export default async function InventoryItemPage({
               </p>
             </div>
           )}
+
+          <div className="mt-6 border-t border-line pt-6">
+            <p className="eyebrow mb-3">Edit location</p>
+            <ItemLocationForm
+              itemId={item.id}
+              options={locationOptions}
+              defaultLocationId={item.location_id}
+              defaultRowId={item.row_id}
+              defaultSection={item.section}
+            />
+          </div>
         </section>
 
-        {item.kind === "serialized" && <UnitsPanel item={item} />}
+        {item.kind === "serialized" && (
+          <UnitsPanel item={item} locationOptions={locationOptions} />
+        )}
 
         <MaintenancePanel item={item} />
       </div>

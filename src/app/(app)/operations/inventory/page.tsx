@@ -1,18 +1,22 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireModule } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listInventory, listCategories } from "@/lib/inventory/queries";
+import { listLocationOptions } from "@/lib/locations/queries";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { NewItemForm } from "@/components/inventory/new-item-form";
+import { CsvImport } from "@/components/inventory/csv-import";
 
 export const metadata: Metadata = { title: "Inventory" };
 
 export default async function InventoryPage() {
   await requireModule("operations");
 
-  const [rows, categories] = await Promise.all([
+  const [rows, categories, locationOptions] = await Promise.all([
     listInventory(),
     listCategories(),
+    listLocationOptions(),
   ]);
 
   return (
@@ -21,17 +25,31 @@ export default async function InventoryPage() {
         eyebrow="Operations"
         title="Inventory"
         description="Equipment and machines — bulk stock by quantity plus individually tracked serialized units, with availability and maintenance."
+        action={
+          <Link
+            href="/operations/inventory/locations"
+            className="rounded-(--radius-card) border border-line bg-cream px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-card"
+          >
+            Manage locations
+          </Link>
+        }
       />
 
       {rows.length === 0 ? (
-        <EmptyState categories={categories} />
+        <EmptyState categories={categories} locationOptions={locationOptions} />
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="text-sm text-muted">
               {rows.length} {rows.length === 1 ? "item" : "items"}
             </p>
-            <NewItemForm categories={categories} />
+            <div className="flex flex-wrap items-center gap-3">
+              <CsvImport />
+              <NewItemForm
+                categories={categories}
+                locationOptions={locationOptions}
+              />
+            </div>
           </div>
           <InventoryTable rows={rows} />
         </div>
@@ -42,8 +60,10 @@ export default async function InventoryPage() {
 
 function EmptyState({
   categories,
+  locationOptions,
 }: {
   categories: Awaited<ReturnType<typeof listCategories>>;
+  locationOptions: Awaited<ReturnType<typeof listLocationOptions>>;
 }) {
   return (
     <div className="rounded-(--radius-card) border border-dashed border-line bg-card p-10 text-center">
@@ -55,8 +75,12 @@ function EmptyState({
         Add your first piece of equipment. Track it as bulk stock by quantity,
         or as a serialized asset with individually tagged units.
       </p>
-      <div className="mt-6 flex justify-center">
-        <NewItemForm categories={categories} />
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <CsvImport />
+        <NewItemForm
+          categories={categories}
+          locationOptions={locationOptions}
+        />
       </div>
     </div>
   );

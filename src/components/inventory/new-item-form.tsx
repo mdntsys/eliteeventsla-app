@@ -3,6 +3,8 @@
 import { useActionState, useState } from "react";
 import { createInventoryItem } from "@/lib/inventory/actions";
 import type { ActionState, InventoryCategory } from "@/lib/inventory/types";
+import type { LocationOption } from "@/lib/locations/types";
+import { LocationFields } from "@/components/inventory/location-fields";
 
 /**
  * Inline "Add item" control. A toggle reveals a form bound to the
@@ -16,8 +18,10 @@ const FIELD =
 
 export function NewItemForm({
   categories,
+  locationOptions,
 }: {
   categories: InventoryCategory[];
+  locationOptions: LocationOption[];
 }) {
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<"bulk" | "serialized">("bulk");
@@ -109,11 +113,6 @@ export function NewItemForm({
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="eyebrow">Location</span>
-          <input name="location" type="text" className={FIELD} />
-        </label>
-
-        <label className="flex flex-col gap-1.5">
           <span className="eyebrow">Daily rate</span>
           <input
             name="daily_rate"
@@ -136,6 +135,11 @@ export function NewItemForm({
             className={FIELD}
           />
         </label>
+
+        <div className="flex flex-col gap-2 sm:col-span-2">
+          <span className="eyebrow">Location</span>
+          <LocationFields options={locationOptions} idPrefix="new-item" />
+        </div>
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="eyebrow">Description</span>

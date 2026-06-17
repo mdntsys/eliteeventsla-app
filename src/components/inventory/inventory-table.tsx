@@ -37,7 +37,13 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
           <thead>
             <tr className="border-b border-line text-left">
               <th className="px-4 py-3 font-medium text-muted">
+                <span className="sr-only">Image</span>
+              </th>
+              <th className="px-4 py-3 font-medium text-muted">
                 <span className="eyebrow">Name</span>
+              </th>
+              <th className="px-4 py-3 font-medium text-muted">
+                <span className="eyebrow">Location</span>
               </th>
               <th className="px-4 py-3 font-medium text-muted">
                 <span className="eyebrow">Category</span>
@@ -63,6 +69,18 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
                 className="border-b border-line last:border-b-0 transition hover:bg-cream"
               >
                 <td className="px-4 py-3">
+                  {row.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={row.image_url}
+                      alt={row.name}
+                      className="h-10 w-10 rounded-(--radius-card) border border-line object-cover"
+                    />
+                  ) : (
+                    <span className="block h-10 w-10 rounded-(--radius-card) border border-dashed border-line bg-cream" />
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   <Link
                     href={`/operations/inventory/${row.id}`}
                     className="font-medium text-navy underline-offset-2 hover:underline"
@@ -79,6 +97,11 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="px-4 py-3 text-ink">
+                  {row.location_summary ?? (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-ink">
                   {row.category_name ?? <span className="text-muted">—</span>}
