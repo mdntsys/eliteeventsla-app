@@ -7,8 +7,29 @@ import type {
   InventoryItemDetail,
   InventoryListRow,
   InventoryUnit,
+  InventoryUnitView,
   MaintenanceRecord,
 } from "@/lib/inventory/types";
+
+/**
+ * Format a human location label from its parts. Examples:
+ *   "Alvy Warehouse · Row A · §3"
+ *   "Alvy Warehouse · Row A"
+ *   "Alvy Warehouse"
+ *   "Delia's House · §3"
+ * Returns null when there is no location name at all.
+ */
+function formatLocationLabel(
+  locationName: string | null,
+  rowLabel: string | null,
+  section: string | null,
+): string | null {
+  const parts: string[] = [];
+  if (locationName) parts.push(locationName);
+  if (rowLabel) parts.push(rowLabel);
+  if (section) parts.push(`§${section}`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 /** All inventory categories, alphabetical. */
 export async function listCategories(): Promise<InventoryCategory[]> {
@@ -32,21 +53,28 @@ export async function listCategories(): Promise<InventoryCategory[]> {
 export async function listInventory(): Promise<InventoryListRow[]> {
   const supabase = await createClient();
 
-  const [itemsRes, unitsRes, maintRes] = await Promise.all([
-    supabase
-      .from("inventory_items")
-      .select("*, inventory_categories(name)")
-      .order("name", { ascending: true }),
-    supabase.from("inventory_units").select("id, item_id, status"),
-    supabase
-      .from("maintenance_records")
-      .select("id, item_id, unit_id, status")
-      .neq("status", "resolved"),
-  ]);
+  const [itemsRes, unitsRes, maintRes, locationsRes, rowsRes] =
+    await Promise.all([
+      supabase
+        .from("inventory_items")
+        .select("*, inventory_categories(name)")
+        .order("name", { ascending: true }),
+      supabase
+        .from("inventory_units")
+        .select("id, item_id, status, location_id, row_id, section"),
+      supabase
+        .from("maintenance_records")
+        .select("id, item_id, unit_id, status")
+        .neq("status", "resolved"),
+      supabase.from("locations").select("id, name"),
+      supabase.from("warehouse_rows").select("id, label"),
+    ]);
 
   if (itemsRes.error) throw new Error(itemsRes.error.message);
   if (unitsRes.error) throw new Error(unitsRes.error.message);
   if (maintRes.error) throw new Error(maintRes.error.message);
+  if (locationsRes.error) throw new Error(locationsRes.error.message);
+  if (rowsRes.error) throw new Error(rowsRes.error.message);
 
   type ItemWithCategory = InventoryItem & {
     inventory_categories: { name: string } | null;
@@ -55,6 +83,16 @@ export async function listInventory(): Promise<InventoryListRow[]> {
   const items = (itemsRes.data ?? []) as ItemWithCategory[];
   const units = unitsRes.data ?? [];
   const maintenance = maintRes.data ?? [];
+
+  // Lookup maps for resolving location/row labels.
+  const locationNames = new Map<string, string>();
+  for (const loc of locationsRes.data ?? []) {
+    locationNames.set(loc.id, loc.name);
+  }
+  const rowLabels = new Map<string, string>();
+  for (const row of rowsRes.data ?? []) {
+    rowLabels.set(row.id, row.label);
+  }
 
   // unit_id -> item_id, so unit-attached maintenance counts toward its item.
   const unitToItem = new Map<string, string>();
@@ -84,6 +122,32 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     openMaintenance.set(itemId, (openMaintenance.get(itemId) ?? 0) + 1);
   }
 
+  // For serialized items, collect the distinct location names across units (in
+  // first-seen order) so we can summarize where the set physically lives.
+  const unitLocationsByItem = new Map<string, string[]>();
+  for (const unit of units) {
+    if (!unit.location_id) continue;
+    const name = locationNames.get(unit.location_id);
+    if (!name) continue;
+    const seen = unitLocationsByItem.get(unit.item_id) ?? [];
+    if (!seen.includes(name)) {
+      seen.push(name);
+      unitLocationsByItem.set(unit.item_id, seen);
+    }
+  }
+
+  function locationSummaryFor(item: ItemWithCategory): string | null {
+    if (item.kind === "serialized") {
+      const names = unitLocationsByItem.get(item.id);
+      return names && names.length > 0 ? names.join(" · ") : null;
+    }
+    return formatLocationLabel(
+      item.location_id ? (locationNames.get(item.location_id) ?? null) : null,
+      item.row_id ? (rowLabels.get(item.row_id) ?? null) : null,
+      item.section,
+    );
+  }
+
   return items.map((item) => {
     const { inventory_categories, ...rest } = item;
     return {
@@ -92,6 +156,7 @@ export async function listInventory(): Promise<InventoryListRow[]> {
       unit_count: unitCounts.get(item.id) ?? 0,
       available_units: availableCounts.get(item.id) ?? 0,
       open_maintenance: openMaintenance.get(item.id) ?? 0,
+      location_summary: locationSummaryFor(item),
     };
   });
 }
@@ -126,7 +191,49 @@ export async function getInventoryItem(
     .order("created_at", { ascending: true });
 
   if (unitsError) throw new Error(unitsError.message);
-  const units = (unitsData ?? []) as InventoryUnit[];
+  const rawUnits = (unitsData ?? []) as InventoryUnit[];
+
+  // Resolve location + row labels for the item and all of its units in one shot.
+  const locationIds = new Set<string>();
+  const rowIds = new Set<string>();
+  if (item.location_id) locationIds.add(item.location_id);
+  if (item.row_id) rowIds.add(item.row_id);
+  for (const unit of rawUnits) {
+    if (unit.location_id) locationIds.add(unit.location_id);
+    if (unit.row_id) rowIds.add(unit.row_id);
+  }
+
+  const locationNames = new Map<string, string>();
+  const rowLabels = new Map<string, string>();
+
+  const [locationsRes, rowsRes] = await Promise.all([
+    locationIds.size > 0
+      ? supabase
+          .from("locations")
+          .select("id, name")
+          .in("id", Array.from(locationIds))
+      : Promise.resolve({ data: [], error: null }),
+    rowIds.size > 0
+      ? supabase
+          .from("warehouse_rows")
+          .select("id, label")
+          .in("id", Array.from(rowIds))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (locationsRes.error) throw new Error(locationsRes.error.message);
+  if (rowsRes.error) throw new Error(rowsRes.error.message);
+
+  for (const loc of locationsRes.data ?? []) locationNames.set(loc.id, loc.name);
+  for (const row of rowsRes.data ?? []) rowLabels.set(row.id, row.label);
+
+  const units: InventoryUnitView[] = rawUnits.map((unit) => ({
+    ...unit,
+    location_name: unit.location_id
+      ? (locationNames.get(unit.location_id) ?? null)
+      : null,
+    row_label: unit.row_id ? (rowLabels.get(unit.row_id) ?? null) : null,
+  }));
 
   // Maintenance attached to the item or any of its units.
   const unitIds = units.map((u) => u.id);
@@ -149,5 +256,9 @@ export async function getInventoryItem(
     category_name: inventory_categories?.name ?? null,
     units,
     maintenance,
+    location_name: item.location_id
+      ? (locationNames.get(item.location_id) ?? null)
+      : null,
+    row_label: item.row_id ? (rowLabels.get(item.row_id) ?? null) : null,
   };
 }

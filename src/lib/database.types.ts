@@ -668,10 +668,13 @@ export type Database = {
           image_url: string | null
           kind: Database["public"]["Enums"]["inventory_kind"]
           location: string | null
+          location_id: string | null
           name: string
           notes: string | null
           quantity: number
           replacement_cost: number | null
+          row_id: string | null
+          section: string | null
           sku: string | null
           status: Database["public"]["Enums"]["item_status"]
           updated_at: string
@@ -686,10 +689,13 @@ export type Database = {
           image_url?: string | null
           kind?: Database["public"]["Enums"]["inventory_kind"]
           location?: string | null
+          location_id?: string | null
           name: string
           notes?: string | null
           quantity?: number
           replacement_cost?: number | null
+          row_id?: string | null
+          section?: string | null
           sku?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           updated_at?: string
@@ -704,10 +710,13 @@ export type Database = {
           image_url?: string | null
           kind?: Database["public"]["Enums"]["inventory_kind"]
           location?: string | null
+          location_id?: string | null
           name?: string
           notes?: string | null
           quantity?: number
           replacement_cost?: number | null
+          row_id?: string | null
+          section?: string | null
           sku?: string | null
           status?: Database["public"]["Enums"]["item_status"]
           updated_at?: string
@@ -727,6 +736,20 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_items_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_items_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "warehouse_rows"
+            referencedColumns: ["id"]
+          },
         ]
       }
       inventory_units: {
@@ -736,7 +759,11 @@ export type Database = {
           condition_notes: string | null
           created_at: string
           id: string
+          image_url: string | null
           item_id: string
+          location_id: string | null
+          row_id: string | null
+          section: string | null
           serial_number: string | null
           status: Database["public"]["Enums"]["unit_status"]
           updated_at: string
@@ -747,7 +774,11 @@ export type Database = {
           condition_notes?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           item_id: string
+          location_id?: string | null
+          row_id?: string | null
+          section?: string | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["unit_status"]
           updated_at?: string
@@ -758,7 +789,11 @@ export type Database = {
           condition_notes?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           item_id?: string
+          location_id?: string | null
+          row_id?: string | null
+          section?: string | null
           serial_number?: string | null
           status?: Database["public"]["Enums"]["unit_status"]
           updated_at?: string
@@ -769,6 +804,20 @@ export type Database = {
             columns: ["item_id"]
             isOneToOne: false
             referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_units_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_units_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "warehouse_rows"
             referencedColumns: ["id"]
           },
         ]
@@ -896,6 +945,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      locations: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          kind: Database["public"]["Enums"]["location_kind"]
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["location_kind"]
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          kind?: Database["public"]["Enums"]["location_kind"]
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       maintenance_records: {
         Row: {
@@ -1448,6 +1527,35 @@ export type Database = {
           },
         ]
       }
+      warehouse_rows: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          location_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          location_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          location_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warehouse_rows_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1479,6 +1587,7 @@ export type Database = {
       inventory_kind: "bulk" | "serialized"
       invoice_status: "draft" | "sent" | "partial" | "paid" | "overdue" | "void"
       item_status: "available" | "maintenance" | "retired"
+      location_kind: "warehouse" | "offsite"
       maintenance_status: "open" | "in_progress" | "resolved"
       payment_method: "card" | "cash" | "check" | "bank_transfer" | "stripe"
       payment_status:
@@ -1660,6 +1769,7 @@ export const Constants = {
       inventory_kind: ["bulk", "serialized"],
       invoice_status: ["draft", "sent", "partial", "paid", "overdue", "void"],
       item_status: ["available", "maintenance", "retired"],
+      location_kind: ["warehouse", "offsite"],
       maintenance_status: ["open", "in_progress", "resolved"],
       payment_method: ["card", "cash", "check", "bank_transfer", "stripe"],
       payment_status: [

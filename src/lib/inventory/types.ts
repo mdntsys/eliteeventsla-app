@@ -20,13 +20,24 @@ export type InventoryListRow = InventoryItem & {
   unit_count: number;
   available_units: number;
   open_maintenance: number;
+  /** Human label of where the item / its units live (null if unknown). */
+  location_summary: string | null;
+};
+
+/** A unit with its resolved location + warehouse row labels. */
+export type InventoryUnitView = InventoryUnit & {
+  location_name: string | null;
+  row_label: string | null;
 };
 
 /** A single item with its category, its units, and its maintenance history. */
 export type InventoryItemDetail = InventoryItem & {
   category_name: string | null;
-  units: InventoryUnit[];
+  units: InventoryUnitView[];
   maintenance: MaintenanceRecord[];
+  /** Item-level resolved location + warehouse row labels. */
+  location_name: string | null;
+  row_label: string | null;
 };
 
 /** Return shape for every server action (useActionState compatible). */
