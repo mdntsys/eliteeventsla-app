@@ -5,12 +5,14 @@ import { requireModule } from "@/lib/auth/dal";
 import { getEvent, listStaff, checkAvailability } from "@/lib/events/queries";
 import { listInventory } from "@/lib/inventory/queries";
 import { listEventVendors, listVendorsForPicker } from "@/lib/vendors/queries";
+import { listEventTickets } from "@/lib/servicing/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { EventStatusControl } from "@/components/events/event-status-control";
 import { TimelinePanel } from "@/components/events/timeline-panel";
 import { InventoryPanel } from "@/components/events/inventory-panel";
 import { ReturnsPanel } from "@/components/events/returns-panel";
 import { EventVendorsPanel } from "@/components/events/event-vendors-panel";
+import { EventTicketsPanel } from "@/components/servicing/event-tickets-panel";
 import type { Availability } from "@/lib/events/types";
 
 export const metadata: Metadata = { title: "Event" };
@@ -103,10 +105,12 @@ export default async function EventDetailPage({
 
   if (!ev) notFound();
 
-  // Vendors tied to this job + the active-vendor picker source for the panel.
-  const [eventVendors, vendorOptions] = await Promise.all([
+  // Vendors tied to this job + the active-vendor picker source for the panel,
+  // plus the service tickets logged against this job for the servicing panel.
+  const [eventVendors, vendorOptions, eventTickets] = await Promise.all([
     listEventVendors(ev.id),
     listVendorsForPicker(),
+    listEventTickets(ev.id),
   ]);
 
   // Compute availability per distinct event-item inventory_item_id over the job
@@ -209,6 +213,8 @@ export default async function EventDetailPage({
           rows={eventVendors}
           vendorOptions={vendorOptions}
         />
+
+        <EventTicketsPanel eventId={ev.id} rows={eventTickets} staff={staff} />
 
         <ReturnsPanel ev={ev} />
       </div>

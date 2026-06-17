@@ -1212,6 +1212,7 @@ export type Database = {
       service_tickets: {
         Row: {
           assigned_to: string | null
+          category: Database["public"]["Enums"]["ticket_category"]
           contact_id: string | null
           created_at: string
           created_by: string | null
@@ -1226,6 +1227,7 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1240,6 +1242,7 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          category?: Database["public"]["Enums"]["ticket_category"]
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -1309,6 +1312,45 @@ export type Database = {
           type?: string
         }
         Relationships: []
+      }
+      ticket_comments: {
+        Row: {
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          ticket_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          ticket_id: string
+        }
+        Update: {
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_comments_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "service_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vendor_categories: {
         Row: {
@@ -1453,6 +1495,13 @@ export type Database = {
         | "teardown"
         | "site_visit"
         | "other"
+      ticket_category:
+        | "delivery"
+        | "equipment"
+        | "billing"
+        | "change_request"
+        | "complaint"
+        | "general"
       ticket_priority: "low" | "medium" | "high" | "urgent"
       ticket_status: "open" | "in_progress" | "resolved" | "closed"
       unit_status:
@@ -1629,6 +1678,14 @@ export const Constants = {
         "teardown",
         "site_visit",
         "other",
+      ],
+      ticket_category: [
+        "delivery",
+        "equipment",
+        "billing",
+        "change_request",
+        "complaint",
+        "general",
       ],
       ticket_priority: ["low", "medium", "high", "urgent"],
       ticket_status: ["open", "in_progress", "resolved", "closed"],
