@@ -391,7 +391,7 @@ export function InventoryPanel({
 
   return (
     <section className="rounded-(--radius-card) border border-line bg-card p-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-display text-xl font-light text-navy">Inventory</h2>
         <div className="flex items-center gap-3">
           <span className="eyebrow">{ev.items.length} reserved</span>

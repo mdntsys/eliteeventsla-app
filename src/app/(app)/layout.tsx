@@ -1,5 +1,5 @@
 import { requireUser, getProfile } from "@/lib/auth/dal";
-import { AppSidebar } from "@/components/app-sidebar";
+import { AppChrome } from "@/components/app-chrome";
 
 /** Centered interstitial for accounts that can't enter the app yet. */
 function AccountNotice({
@@ -84,17 +84,12 @@ export default async function AppLayout({
   }
 
   return (
-    // Fixed-height app shell: the sidebar stays pinned while only the content
-    // pane scrolls.
-    <div className="flex h-svh overflow-hidden">
-      <AppSidebar
-        role={profile.role}
-        name={profile.full_name}
-        email={profile.email}
-      />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        <main className="mx-auto max-w-6xl px-8 py-10">{children}</main>
-      </div>
-    </div>
+    <AppChrome
+      role={profile.role}
+      name={profile.full_name}
+      email={profile.email}
+    >
+      {children}
+    </AppChrome>
   );
 }

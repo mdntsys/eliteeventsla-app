@@ -5,14 +5,16 @@ import { usePathname } from "next/navigation";
 import { NAV_SECTIONS } from "@/components/nav-config";
 import { canAccess, ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
 
-export function AppSidebar({
+export function SidebarContent({
   role,
   name,
   email,
+  onNavigate,
 }: {
   role: AppRole;
   name: string | null;
   email: string | null;
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
   const sections = NAV_SECTIONS.filter((section) =>
@@ -20,7 +22,7 @@ export function AppSidebar({
   );
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-line bg-card">
+    <>
       <div className="border-b border-line px-5 py-5">
         <p className="eyebrow">Operations OS</p>
         <p className="font-display mt-1 text-xl font-normal leading-tight text-navy">
@@ -40,6 +42,7 @@ export function AppSidebar({
                     <Link
                       href={item.href}
                       aria-current={active ? "page" : undefined}
+                      onClick={() => onNavigate?.()}
                       className={[
                         "block rounded-(--radius-card) px-2.5 py-1.5 text-sm transition",
                         active
@@ -71,6 +74,6 @@ export function AppSidebar({
           </button>
         </form>
       </div>
-    </aside>
+    </>
   );
 }

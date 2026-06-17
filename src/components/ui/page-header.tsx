@@ -12,7 +12,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="mb-8 flex items-start justify-between gap-4 border-b border-line pb-6">
+    <header className="mb-8 flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
       <div>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1 className="font-display mt-1 text-3xl font-light text-navy">

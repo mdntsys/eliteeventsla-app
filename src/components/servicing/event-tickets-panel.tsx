@@ -184,7 +184,7 @@ export function EventTicketsPanel({
 }) {
   return (
     <section className="rounded-(--radius-card) border border-line bg-card p-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <h2 className="font-display text-xl font-light text-navy">Servicing</h2>
         <span className="eyebrow">{rows.length} on this job</span>
       </div>

@@ -313,7 +313,7 @@ export function TimelinePanel({
 }) {
   return (
     <section className="rounded-(--radius-card) border border-line bg-card p-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="eyebrow">Logistics</p>
           <h2 className="font-display mt-0.5 text-xl font-light text-navy">

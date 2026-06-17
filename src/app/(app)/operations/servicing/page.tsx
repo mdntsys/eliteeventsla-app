@@ -210,6 +210,7 @@ export default async function ServicingPage({
           </p>
         ) : (
           <div className="overflow-hidden rounded-(--radius-card) border border-line bg-card">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left">
@@ -271,6 +272,7 @@ export default async function ServicingPage({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
