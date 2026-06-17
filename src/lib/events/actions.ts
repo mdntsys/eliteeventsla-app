@@ -171,9 +171,26 @@ const CheckInSchema = z.object({
   return_notes: optionalText,
 });
 
+const attachmentKindEnum = z.enum([
+  "return_proof",
+  "delivery_proof",
+  "other",
+]);
+
 const UploadProofSchema = z.object({
   event_id: z.uuid("An event is required."),
   event_item_id: optionalUuid,
+  kind: attachmentKindEnum.default("return_proof"),
+});
+
+const CheckOutAllSchema = z.object({
+  event_id: z.uuid("An event is required."),
+});
+
+const SetActualTimesSchema = z.object({
+  event_id: z.uuid("An event is required."),
+  field: z.enum(["start", "end"]),
+  value: z.string(),
 });
 
 /** Pull the first zod issue message for a friendly action error. */
@@ -537,7 +554,23 @@ export async function checkOutItem(
     }
   }
 
+  // Auto-advance a confirmed job to in_progress on first check-out.
+  if (updated.event_id) {
+    const { data: parent } = await supabase
+      .from("events")
+      .select("status")
+      .eq("id", updated.event_id)
+      .maybeSingle();
+    if (parent?.status === "confirmed") {
+      await supabase
+        .from("events")
+        .update({ status: "in_progress" })
+        .eq("id", updated.event_id);
+    }
+  }
+
   revalidatePath(`/events/${updated.event_id}`);
+  revalidatePath("/operations/scheduling");
   return { success: true };
 }
 
@@ -590,7 +623,27 @@ export async function checkInItem(
     }
   }
 
+  // Auto-complete the job once every reserved item has been returned.
+  if (updated.event_id) {
+    const { count: outstanding } = await supabase
+      .from("event_items")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", updated.event_id)
+      .is("returned_at", null);
+    const { count: total } = await supabase
+      .from("event_items")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", updated.event_id);
+    if ((outstanding ?? 0) === 0 && (total ?? 0) >= 1) {
+      await supabase
+        .from("events")
+        .update({ status: "completed" })
+        .eq("id", updated.event_id);
+    }
+  }
+
   revalidatePath(`/events/${updated.event_id}`);
+  revalidatePath("/operations/scheduling");
   return { success: true };
 }
 
@@ -603,6 +656,7 @@ export async function uploadReturnProof(
   const parsed = UploadProofSchema.safeParse({
     event_id: formData.get("event_id"),
     event_item_id: formData.get("event_item_id"),
+    kind: formData.get("kind") ?? undefined,
   });
   if (!parsed.success) {
     return { error: firstError(parsed.error) };
@@ -637,7 +691,7 @@ export async function uploadReturnProof(
       event_id: data.event_id,
       event_item_id: data.event_item_id,
       storage_path: path,
-      kind: "return_proof",
+      kind: data.kind,
       uploaded_by: user?.id ?? null,
     });
 
@@ -646,5 +700,141 @@ export async function uploadReturnProof(
   }
 
   revalidatePath(`/events/${data.event_id}`);
+  revalidatePath("/operations/scheduling");
+  return { success: true };
+}
+
+// --- Actions: load-out + actual event times ---------------------------------
+
+/**
+ * Bulk check-out: stamp checked_out_at on every still-open, not-yet-returned
+ * line of an event, flip their serialized units to in_use, and bump a
+ * confirmed job to in_progress.
+ */
+export async function checkOutAllItems(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireModule("operations");
+
+  const parsed = CheckOutAllSchema.safeParse({
+    event_id: formData.get("event_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const { event_id } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: pending, error: pendingError } = await supabase
+    .from("event_items")
+    .select("id, unit_id")
+    .eq("event_id", event_id)
+    .is("checked_out_at", null)
+    .is("returned_at", null);
+
+  if (pendingError) {
+    return { error: pendingError.message };
+  }
+
+  const rows = pending ?? [];
+  if (rows.length === 0) {
+    return { error: "Nothing left to check out." };
+  }
+
+  const now = new Date().toISOString();
+
+  const { error: updateError } = await supabase
+    .from("event_items")
+    .update({ checked_out_at: now })
+    .eq("event_id", event_id)
+    .is("checked_out_at", null)
+    .is("returned_at", null);
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  const unitIds = rows
+    .map((r) => r.unit_id)
+    .filter((id): id is string => id !== null);
+  if (unitIds.length > 0) {
+    const { error: unitError } = await supabase
+      .from("inventory_units")
+      .update({ status: "in_use" })
+      .in("id", unitIds);
+    if (unitError) {
+      return { error: unitError.message };
+    }
+  }
+
+  const { data: parent } = await supabase
+    .from("events")
+    .select("status")
+    .eq("id", event_id)
+    .maybeSingle();
+  if (parent?.status === "confirmed") {
+    await supabase
+      .from("events")
+      .update({ status: "in_progress" })
+      .eq("id", event_id);
+  }
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath("/operations/scheduling");
+  return { success: true };
+}
+
+/**
+ * Record an actual event start/end time. value: 'now' stamps the current time,
+ * '' clears it, otherwise an ISO/datetime-local string is parsed and stored.
+ */
+export async function setActualEventTimes(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireModule("operations");
+
+  const parsed = SetActualTimesSchema.safeParse({
+    event_id: formData.get("event_id"),
+    field: formData.get("field"),
+    value: formData.get("value"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const { event_id, field, value } = parsed.data;
+
+  let ts: string | null;
+  const trimmed = value.trim();
+  if (trimmed === "now") {
+    ts = new Date().toISOString();
+  } else if (trimmed === "") {
+    ts = null;
+  } else {
+    const d = new Date(trimmed);
+    if (Number.isNaN(d.getTime())) {
+      return { error: "Enter a valid date/time." };
+    }
+    ts = d.toISOString();
+  }
+
+  const supabase = await createClient();
+
+  const patch =
+    field === "start" ? { actual_start_at: ts } : { actual_end_at: ts };
+  const { error } = await supabase
+    .from("events")
+    .update(patch)
+    .eq("id", event_id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath("/operations/scheduling");
   return { success: true };
 }

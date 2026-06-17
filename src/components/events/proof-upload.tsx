@@ -13,9 +13,11 @@ import type { ActionState } from "@/lib/events/types";
 export function ProofUpload({
   eventId,
   eventItemId,
+  kind = "return_proof",
 }: {
   eventId: string;
   eventItemId?: string;
+  kind?: "return_proof" | "delivery_proof" | "other";
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     uploadReturnProof,
@@ -29,6 +31,7 @@ export function ProofUpload({
       className="mt-3 flex flex-wrap items-center gap-2"
     >
       <input type="hidden" name="event_id" value={eventId} />
+      <input type="hidden" name="kind" value={kind} />
       {eventItemId && (
         <input type="hidden" name="event_item_id" value={eventItemId} />
       )}

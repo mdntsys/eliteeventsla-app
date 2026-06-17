@@ -530,6 +530,8 @@ export type Database = {
       }
       events: {
         Row: {
+          actual_end_at: string | null
+          actual_start_at: string | null
           company_id: string | null
           contact_id: string | null
           created_at: string
@@ -551,6 +553,8 @@ export type Database = {
           venue_name: string | null
         }
         Insert: {
+          actual_end_at?: string | null
+          actual_start_at?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -572,6 +576,8 @@ export type Database = {
           venue_name?: string | null
         }
         Update: {
+          actual_end_at?: string | null
+          actual_start_at?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string

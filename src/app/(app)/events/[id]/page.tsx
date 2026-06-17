@@ -13,6 +13,9 @@ import { InventoryPanel } from "@/components/events/inventory-panel";
 import { ReturnsPanel } from "@/components/events/returns-panel";
 import { EventVendorsPanel } from "@/components/events/event-vendors-panel";
 import { EventTicketsPanel } from "@/components/servicing/event-tickets-panel";
+import { JobStageTracker } from "@/components/events/job-stage-tracker";
+import { ReadinessChecklist } from "@/components/events/readiness-checklist";
+import { deriveStage, computeReadiness } from "@/lib/events/lifecycle";
 import type { Availability } from "@/lib/events/types";
 
 export const metadata: Metadata = { title: "Event" };
@@ -50,6 +53,18 @@ function formatWindow(start: string | null, end: string | null): string {
     });
   if (start && end) return `${fmt(start)} – ${fmt(end)}`;
   return fmt((start ?? end) as string);
+}
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function SummaryField({
@@ -134,6 +149,15 @@ export default async function EventDetailPage({
     }
   }
 
+  // Derive the lifecycle stage + dispatch readiness from already-fetched data.
+  const stage = deriveStage({ status: ev.status, items: ev.items });
+  const readiness = computeReadiness({
+    items: ev.items,
+    schedule: ev.schedule,
+    vendors: eventVendors,
+    tickets: eventTickets,
+  });
+
   return (
     <>
       <PageHeader
@@ -154,6 +178,13 @@ export default async function EventDetailPage({
       />
 
       <div className="flex flex-col gap-6">
+        <JobStageTracker
+          current={{ key: stage.key, index: stage.index }}
+          status={ev.status}
+        />
+
+        <ReadinessChecklist items={readiness} />
+
         <section className="rounded-(--radius-card) border border-line bg-card p-6">
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -187,6 +218,12 @@ export default async function EventDetailPage({
             </SummaryField>
             <SummaryField label="Total">
               {formatCurrency(ev.total_amount)}
+            </SummaryField>
+            <SummaryField label="Actual start">
+              {formatTimestamp(ev.actual_start_at)}
+            </SummaryField>
+            <SummaryField label="Actual end">
+              {formatTimestamp(ev.actual_end_at)}
             </SummaryField>
           </div>
 

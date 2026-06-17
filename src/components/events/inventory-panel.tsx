@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { reserveItem, removeEventItem, checkOutItem } from "@/lib/events/actions";
+import {
+  reserveItem,
+  removeEventItem,
+  checkOutItem,
+  checkOutAllItems,
+} from "@/lib/events/actions";
 import type {
   ActionState,
   Availability,
@@ -170,6 +175,94 @@ function AvailabilityRow({
       </div>
       {detail && <p className="mt-0.5 text-xs text-muted">{detail}</p>}
     </li>
+  );
+}
+
+/* ── Load-out manifest + "Check out all" ─────────────────────────────── */
+
+function CheckOutAllButton({
+  eventId,
+  remaining,
+}: {
+  eventId: string;
+  remaining: number;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    checkOutAllItems,
+    undefined,
+  );
+  return (
+    <form action={action} className="shrink-0">
+      <input type="hidden" name="event_id" value={eventId} />
+      <button
+        type="submit"
+        disabled={pending || remaining === 0}
+        className="rounded-(--radius-card) bg-navy px-4 py-2 text-xs font-medium text-cream transition hover:opacity-90 disabled:opacity-60"
+      >
+        {pending ? "Checking out…" : "Check out all"}
+      </button>
+      {state?.error && (
+        <p role="alert" className="mt-1 text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
+function LoadOutSection({ ev }: { ev: EventDetail }) {
+  const manifest = ev.items;
+  const remaining = manifest.filter(
+    (line) => line.checked_out_at == null && line.returned_at == null,
+  ).length;
+
+  return (
+    <div className="mt-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="eyebrow">Load-out manifest</p>
+        <CheckOutAllButton eventId={ev.id} remaining={remaining} />
+      </div>
+      <ul className="divide-y divide-line overflow-hidden rounded-(--radius-card) border border-line">
+        {manifest.map((line) => {
+          const checkedOut = line.checked_out_at != null;
+          const returned = line.returned_at != null;
+          return (
+            <li
+              key={line.id}
+              className="flex items-center justify-between gap-3 bg-cream px-4 py-2.5"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden
+                  className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-[10px] font-semibold ${
+                    checkedOut || returned
+                      ? "bg-navy text-cream"
+                      : "border border-line bg-card text-transparent"
+                  }`}
+                >
+                  ✓
+                </span>
+                <span className="truncate text-sm text-ink">
+                  {line.item_name}
+                  {line.unit_asset_tag ? (
+                    <span className="ml-2 font-mono text-xs text-muted">
+                      {line.unit_asset_tag}
+                    </span>
+                  ) : (
+                    <span className="ml-2 text-xs text-muted">
+                      ×{line.quantity}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <span className="shrink-0 text-xs text-muted">
+                {returned ? "Returned" : checkedOut ? "Loaded" : "Pending"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -365,6 +458,8 @@ export function InventoryPanel({
           ))}
         </ul>
       )}
+
+      {ev.items.length > 0 && <LoadOutSection ev={ev} />}
 
       {distinct.length > 0 && (
         <div className="mt-6">
