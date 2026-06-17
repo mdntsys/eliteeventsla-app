@@ -60,13 +60,15 @@ export async function requireProfile(): Promise<Profile> {
 }
 
 /**
- * Require that the current user's role can access `module`. Sends pending
- * (NULL role) or unauthorized users to the dashboard, which renders an
- * appropriate "no access" state. Returns the profile for convenience.
+ * Require that the current user's role can access `module`. Unauthorized users
+ * are redirected to /dashboard, which only lists the modules they can access.
+ * Deactivated and NULL-role users are intercepted earlier by (app)/layout.tsx;
+ * is_active is re-checked here for defense in depth (and mirrors the RLS
+ * helpers, which return no role when is_active is false).
  */
 export async function requireModule(module: ModuleKey): Promise<Profile> {
   const profile = await requireProfile();
-  if (!canAccess(profile.role, module)) {
+  if (!profile.is_active || !canAccess(profile.role, module)) {
     redirect("/dashboard");
   }
   return profile;

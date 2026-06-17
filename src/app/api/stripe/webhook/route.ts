@@ -35,8 +35,11 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  // Idempotency: record the event first. The unique constraint on
-  // stripe_event_id makes replays a no-op.
+  // Idempotency: record the event. The unique stripe_event_id makes replays a
+  // no-op. A duplicate only means the event was *recorded* — not that it was
+  // successfully *handled* (a prior attempt may have inserted the row then
+  // failed). So on a duplicate we skip only if processed_at is already set;
+  // otherwise we fall through and (re)process. handleEvent is idempotent.
   const { error: insertError } = await supabase
     .from("stripe_webhook_events")
     .insert({
@@ -46,14 +49,22 @@ export async function POST(request: Request) {
     });
 
   if (insertError) {
-    if ((insertError as { code?: string }).code === "23505") {
-      // Already processed — acknowledge so Stripe stops retrying.
+    if ((insertError as { code?: string }).code !== "23505") {
+      return NextResponse.json(
+        { error: "Failed to record event" },
+        { status: 500 },
+      );
+    }
+    const { data: existing } = await supabase
+      .from("stripe_webhook_events")
+      .select("processed_at")
+      .eq("stripe_event_id", event.id)
+      .single();
+    if (existing?.processed_at) {
+      // Already fully processed — acknowledge so Stripe stops retrying.
       return NextResponse.json({ received: true, duplicate: true });
     }
-    return NextResponse.json(
-      { error: "Failed to record event" },
-      { status: 500 },
-    );
+    // Recorded but not processed (prior attempt failed) — reprocess below.
   }
 
   try {

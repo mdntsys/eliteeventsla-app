@@ -47,7 +47,7 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(url);
+    return redirectPreservingSession(url, supabaseResponse);
   }
 
   // Already signed in but sitting on /login → send to the dashboard.
@@ -55,8 +55,22 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";
-    return NextResponse.redirect(url);
+    return redirectPreservingSession(url, supabaseResponse);
   }
 
   return supabaseResponse;
+}
+
+/**
+ * Redirect while carrying over any auth cookies the Supabase client refreshed
+ * onto `sessionResponse`. Without this, a redirect issued on the same request
+ * that rotated the session would drop the new tokens and silently log the user
+ * out on the next request.
+ */
+function redirectPreservingSession(url: URL, sessionResponse: NextResponse) {
+  const response = NextResponse.redirect(url);
+  sessionResponse.cookies.getAll().forEach((cookie) => {
+    response.cookies.set(cookie);
+  });
+  return response;
 }

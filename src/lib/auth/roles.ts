@@ -1,7 +1,13 @@
 /**
- * Roles and module-access policy. This mirrors the Postgres RLS policies (see
- * supabase/migrations/0007_rls_policies.sql) and drives which nav items and
- * routes a user can reach. Keep the two in sync.
+ * Roles and module-access policy. This mirrors the Postgres RLS write policies
+ * (supabase/migrations/0007_rls_policies.sql, amended by 0009) and drives which
+ * nav items and routes a user can reach. Keep the two in sync.
+ *
+ * Note: module access ≠ write access on every table in that module. The
+ * `events` table itself is writable by sales+ops+admin (sales converts a won
+ * deal into an event), but its logistics tables (event_items, schedule_*) are
+ * ops-only. Deactivated users (is_active=false) are gated in the DAL and in the
+ * RLS helpers, not here — canAccess only inspects role.
  */
 
 export const APP_ROLES = ["admin", "sales", "ops", "accounting"] as const;
