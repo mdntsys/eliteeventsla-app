@@ -346,8 +346,64 @@ export type Database = {
           },
         ]
       }
+      event_attachments: {
+        Row: {
+          caption: string | null
+          created_at: string
+          event_id: string
+          event_item_id: string | null
+          id: string
+          kind: Database["public"]["Enums"]["attachment_kind"]
+          storage_path: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          event_id: string
+          event_item_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["attachment_kind"]
+          storage_path: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          event_id?: string
+          event_item_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["attachment_kind"]
+          storage_path?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_attachments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attachments_event_item_id_fkey"
+            columns: ["event_item_id"]
+            isOneToOne: false
+            referencedRelation: "event_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_items: {
         Row: {
+          checked_out_at: string | null
           created_at: string
           event_id: string
           id: string
@@ -357,9 +413,15 @@ export type Database = {
           rate: number | null
           reserved_from: string | null
           reserved_to: string | null
+          return_condition:
+            | Database["public"]["Enums"]["return_condition"]
+            | null
+          return_notes: string | null
+          returned_at: string | null
           unit_id: string | null
         }
         Insert: {
+          checked_out_at?: string | null
           created_at?: string
           event_id: string
           id?: string
@@ -369,9 +431,15 @@ export type Database = {
           rate?: number | null
           reserved_from?: string | null
           reserved_to?: string | null
+          return_condition?:
+            | Database["public"]["Enums"]["return_condition"]
+            | null
+          return_notes?: string | null
+          returned_at?: string | null
           unit_id?: string | null
         }
         Update: {
+          checked_out_at?: string | null
           created_at?: string
           event_id?: string
           id?: string
@@ -381,6 +449,11 @@ export type Database = {
           rate?: number | null
           reserved_from?: string | null
           reserved_to?: string | null
+          return_condition?:
+            | Database["public"]["Enums"]["return_condition"]
+            | null
+          return_notes?: string | null
+          returned_at?: string | null
           unit_id?: string | null
         }
         Relationships: [
@@ -1345,6 +1418,7 @@ export type Database = {
     Enums: {
       activity_type: "call" | "email" | "meeting" | "note" | "task"
       app_role: "admin" | "sales" | "ops" | "accounting"
+      attachment_kind: "return_proof" | "delivery_proof" | "other"
       deal_status: "open" | "won" | "lost"
       event_status:
         | "draft"
@@ -1365,6 +1439,7 @@ export type Database = {
         | "succeeded"
         | "failed"
         | "refunded"
+      return_condition: "good" | "damaged" | "lost"
       schedule_status:
         | "scheduled"
         | "en_route"
@@ -1516,6 +1591,7 @@ export const Constants = {
     Enums: {
       activity_type: ["call", "email", "meeting", "note", "task"],
       app_role: ["admin", "sales", "ops", "accounting"],
+      attachment_kind: ["return_proof", "delivery_proof", "other"],
       deal_status: ["open", "won", "lost"],
       event_status: [
         "draft",
@@ -1538,6 +1614,7 @@ export const Constants = {
         "failed",
         "refunded",
       ],
+      return_condition: ["good", "damaged", "lost"],
       schedule_status: [
         "scheduled",
         "en_route",
