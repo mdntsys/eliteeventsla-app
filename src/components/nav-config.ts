@@ -18,6 +18,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Contacts", href: "/crm/contacts" },
       { label: "Companies", href: "/crm/companies" },
       { label: "Deals", href: "/crm/deals" },
+      { label: "Quotes", href: "/crm/quotes" },
     ],
   },
   {
