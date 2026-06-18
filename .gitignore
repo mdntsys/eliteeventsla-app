@@ -45,6 +45,9 @@ next-env.d.ts
 # claude code — local per-machine permission overrides
 .claude/settings.local.json
 
+# autopilot operational brain (contains local creds + run logs; never commit)
+/AUTOPILOT.md
+
 # supabase local cli
 /supabase/.branches
 /supabase/.temp
