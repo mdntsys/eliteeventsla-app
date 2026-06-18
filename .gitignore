@@ -47,6 +47,8 @@ next-env.d.ts
 
 # autopilot operational brain (contains local creds + run logs; never commit)
 /AUTOPILOT.md
+# autopilot kill switch — `touch AUTOPILOT.stop` to halt the loop; stays local-only
+/AUTOPILOT.stop
 
 # supabase local cli
 /supabase/.branches
