@@ -129,15 +129,27 @@ const SetStatusSchema = z.object({
   status: eventStatusEnum,
 });
 
-const ReserveItemSchema = z.object({
-  event_id: z.uuid("An event is required."),
-  inventory_item_id: z.uuid("An item is required."),
-  unit_id: optionalUuid,
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
-  rate: optionalMoney,
-  reserved_from: optionalTimestamp,
-  reserved_to: optionalTimestamp,
-});
+const ReserveItemSchema = z
+  .object({
+    event_id: z.uuid("An event is required."),
+    inventory_item_id: z.uuid("An item is required."),
+    unit_id: optionalUuid,
+    quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
+    rate: optionalMoney,
+    reserved_from: optionalTimestamp,
+    reserved_to: optionalTimestamp,
+  })
+  .refine(
+    (d) =>
+      !d.reserved_from ||
+      !d.reserved_to ||
+      new Date(d.reserved_from).getTime() <=
+        new Date(d.reserved_to).getTime(),
+    {
+      message: "The reserved window can't end before it starts.",
+      path: ["reserved_to"],
+    },
+  );
 
 const RemoveItemSchema = z.object({
   id: z.uuid("A line item is required."),

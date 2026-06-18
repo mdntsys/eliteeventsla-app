@@ -57,11 +57,10 @@ deployment, and auth. Do not couple the two — brand tokens were one-time-copie
 A security/integrity review (see migration `0009`) confirmed two real gaps that are intentionally
 left for the feature pass that adds writers to those tables — they're noise to enforce on empty
 tables and need the feature's semantics to get right:
-- **Inventory availability guards** (`event_items`): no DB-level guard yet against double-booking a
-  serialized `unit_id` over overlapping windows, against `kind`↔`unit_id` mismatch, or against bulk
-  reservations exceeding `inventory_items.quantity`. When building inventory CRUD, add a
-  `btree_gist` EXCLUDE constraint on `(unit_id, tstzrange(reserved_from, reserved_to))`, a
-  `kind`-consistency trigger, and a bulk-capacity trigger; consider making the reserve window NOT NULL.
+- **Inventory availability guards** (`event_items`): the `btree_gist` EXCLUDE against double-booking a
+  serialized `unit_id` over overlapping windows is now in place, and a CHECK enforces an ordered reserve
+  window (migration `0017`). Still deferred: a `kind`↔`unit_id` consistency trigger and a bulk-capacity
+  trigger (bulk reservations exceeding `inventory_items.quantity`); consider making the reserve window NOT NULL.
 - **Maintenance history on delete** (`maintenance_records`): FKs are `ON DELETE CASCADE`, so deleting
   an item/unit wipes repair/cost history. Prefer retiring assets (`status='retired'`) over deletion;
   if hard delete is added, denormalize an asset label and switch to `SET NULL`.
