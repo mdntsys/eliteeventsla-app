@@ -15,7 +15,12 @@ import { EventVendorsPanel } from "@/components/events/event-vendors-panel";
 import { EventTicketsPanel } from "@/components/servicing/event-tickets-panel";
 import { JobStageTracker } from "@/components/events/job-stage-tracker";
 import { ReadinessChecklist } from "@/components/events/readiness-checklist";
-import { deriveStage, computeReadiness } from "@/lib/events/lifecycle";
+import { ProfitabilitySummary } from "@/components/events/profitability-summary";
+import {
+  deriveStage,
+  computeReadiness,
+  computeProfitability,
+} from "@/lib/events/lifecycle";
 import type { Availability } from "@/lib/events/types";
 
 export const metadata: Metadata = { title: "Event" };
@@ -158,6 +163,15 @@ export default async function EventDetailPage({
     tickets: eventTickets,
   });
 
+  // Gross profitability from already-fetched figures (contracted total vs
+  // summed agreed vendor cost). Hidden on brand-new jobs with no money yet.
+  const profitability = computeProfitability({
+    totalAmount: ev.total_amount,
+    vendors: eventVendors,
+  });
+  const showProfitability =
+    profitability.revenue !== 0 || profitability.vendorCost !== 0;
+
   return (
     <>
       <PageHeader
@@ -236,6 +250,8 @@ export default async function EventDetailPage({
             </div>
           )}
         </section>
+
+        {showProfitability && <ProfitabilitySummary data={profitability} />}
 
         <InventoryPanel
           ev={ev}

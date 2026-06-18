@@ -224,3 +224,32 @@ export function computeReadiness(args: {
 
   return [inventory, crew, vendorsItem, ticketsItem];
 }
+
+// --- Profitability ----------------------------------------------------------
+
+export type Profitability = {
+  revenue: number;
+  vendorCost: number;
+  margin: number;
+  /** margin / revenue, or null when there is no revenue to divide by. */
+  marginPct: number | null;
+};
+
+/**
+ * Derive a job's gross profitability from data the event hub already has:
+ * the contracted total against the summed agreed vendor costs. Pure and
+ * defensive — null money is treated as 0 so partially-filled jobs still total.
+ */
+export function computeProfitability(args: {
+  totalAmount: number | null;
+  vendors: { agreed_cost: number | null }[];
+}): Profitability {
+  const revenue = args.totalAmount ?? 0;
+  const vendorCost = (args.vendors ?? []).reduce(
+    (sum, v) => sum + (v.agreed_cost ?? 0),
+    0,
+  );
+  const margin = revenue - vendorCost;
+  const marginPct = revenue > 0 ? margin / revenue : null;
+  return { revenue, vendorCost, margin, marginPct };
+}
