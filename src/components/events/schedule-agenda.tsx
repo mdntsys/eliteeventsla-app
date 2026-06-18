@@ -3,6 +3,10 @@
 import Link from "next/link";
 import type { ScheduleEntryRow } from "@/lib/events/types";
 import { StatusBadge } from "@/components/inventory/status-badge";
+import {
+  computeCrewConflicts,
+  type CrewConflict,
+} from "@/lib/events/scheduling";
 
 /**
  * Cross-job agenda: schedule entries grouped by day, each row links to its
@@ -63,6 +67,25 @@ function assigneeNames(entry: AgendaEntry): string[] {
     .filter((n): n is string => Boolean(n));
 }
 
+function ConflictNotice({ conflicts }: { conflicts: CrewConflict[] }) {
+  return (
+    <div className="mt-3 rounded-(--radius-card) border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+      <p className="font-medium">Crew double-booked</p>
+      <ul className="mt-1 space-y-0.5">
+        {conflicts.map((c, i) => (
+          <li key={i}>
+            {c.staff_name ?? "Someone"} also on{" "}
+            {c.other_event_title ?? "another job"}
+            {c.other_start
+              ? ` (${formatTimeRange(c.other_start, c.other_end)})`
+              : ""}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
   const dated = entries.filter((e) => Boolean(e.scheduled_start));
 
@@ -85,6 +108,9 @@ export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
       new Date(b.scheduled_start as string).getTime(),
   );
 
+  const { byEntry: conflicts, count: conflictCount } =
+    computeCrewConflicts(entries);
+
   const groups = new Map<string, AgendaEntry[]>();
   for (const entry of sorted) {
     const key = dayKey(entry.scheduled_start as string);
@@ -95,6 +121,16 @@ export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
 
   return (
     <div className="space-y-8">
+      {conflictCount > 0 && (
+        <div className="rounded-(--radius-card) border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="font-medium">
+            {conflictCount} {conflictCount === 1 ? "stop has" : "stops have"} a
+            crew double-booking
+          </span>{" "}
+          in this window — a crew member is on two overlapping stops. Flagged
+          below.
+        </div>
+      )}
       {[...groups.entries()].map(([key, dayEntries]) => (
         <section key={key}>
           <div className="mb-3 flex items-baseline justify-between border-b border-line pb-2">
@@ -110,10 +146,13 @@ export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
           <ul className="space-y-3">
             {dayEntries.map((entry) => {
               const names = assigneeNames(entry);
+              const entryConflicts = conflicts[entry.id];
               return (
                 <li
                   key={entry.id}
-                  className="rounded-(--radius-card) border border-line bg-card p-4 transition hover:bg-cream"
+                  className={`rounded-(--radius-card) border bg-card p-4 transition hover:bg-cream ${
+                    entryConflicts ? "border-red-200" : "border-line"
+                  }`}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -151,6 +190,7 @@ export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
                       )}
                     </div>
                   </div>
+                  {entryConflicts && <ConflictNotice conflicts={entryConflicts} />}
                 </li>
               );
             })}

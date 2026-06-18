@@ -14,6 +14,7 @@ import type {
   ScheduleEntryRow,
   StaffMember,
 } from "@/lib/events/types";
+import type { CrewConflict } from "@/lib/events/scheduling";
 import { StatusBadge } from "@/components/inventory/status-badge";
 
 /**
@@ -185,12 +186,26 @@ function AssignStaffForm({
   );
 }
 
+function formatOther(start: string | null, end: string | null): string {
+  if (!start) return "";
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  return end ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
+}
+
 function ScheduleEntryCard({
   entry,
   staff,
+  conflicts,
 }: {
   entry: ScheduleEntryRow;
   staff: StaffMember[];
+  conflicts?: CrewConflict[];
 }) {
   return (
     <li className="rounded-(--radius-card) border border-line bg-card p-4">
@@ -224,6 +239,21 @@ function ScheduleEntryCard({
           </ul>
         )}
         <AssignStaffForm entryId={entry.id} staff={staff} />
+
+        {conflicts && conflicts.length > 0 && (
+          <div className="mt-3 rounded-(--radius-card) border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p className="font-medium">Crew double-booked</p>
+            <ul className="mt-1 space-y-0.5">
+              {conflicts.map((c, i) => (
+                <li key={i}>
+                  {c.staff_name ?? "Someone"} also on{" "}
+                  {c.other_event_title ?? "another job"}
+                  {c.other_start ? ` (${formatOther(c.other_start, c.other_end)})` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </li>
   );
@@ -307,9 +337,11 @@ function AddScheduleEntryForm({ eventId }: { eventId: string }) {
 export function TimelinePanel({
   ev,
   staff,
+  crewConflicts,
 }: {
   ev: EventDetail;
   staff: StaffMember[];
+  crewConflicts?: Record<string, CrewConflict[]>;
 }) {
   return (
     <section className="rounded-(--radius-card) border border-line bg-card p-6">
@@ -330,7 +362,12 @@ export function TimelinePanel({
       ) : (
         <ul className="flex flex-col gap-3">
           {ev.schedule.map((entry) => (
-            <ScheduleEntryCard key={entry.id} entry={entry} staff={staff} />
+            <ScheduleEntryCard
+              key={entry.id}
+              entry={entry}
+              staff={staff}
+              conflicts={crewConflicts?.[entry.id]}
+            />
           ))}
         </ul>
       )}

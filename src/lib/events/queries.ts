@@ -13,6 +13,11 @@ import type {
   ScheduleEntryRow,
   StaffMember,
 } from "@/lib/events/types";
+import {
+  computeCrewConflicts,
+  type CrewConflict,
+  type SchedulingEntry,
+} from "@/lib/events/scheduling";
 
 /**
  * Server-only data access for the event/job lifecycle. All queries run under
@@ -436,6 +441,91 @@ export async function listScheduleInRange(
       event_type: events?.event_type ?? "other",
     };
   });
+}
+
+/**
+ * Crew double-booking conflicts for one event's schedule entries, keyed by
+ * entry id. Looks across every event the assigned people appear on, so a clash
+ * with another job surfaces right where crew is assigned. Returns {} when the
+ * event has no time-bounded, staffed stops.
+ */
+export async function getEventCrewConflicts(
+  eventId: string,
+): Promise<Record<string, CrewConflict[]>> {
+  const supabase = await createClient();
+
+  // This event's entries + who's on them.
+  const { data: mineData, error: mineError } = await supabase
+    .from("schedule_entries")
+    .select("id, schedule_assignments(profile_id)")
+    .eq("event_id", eventId);
+  if (mineError) throw new Error(mineError.message);
+
+  const mine = (mineData ?? []) as {
+    id: string;
+    schedule_assignments: { profile_id: string }[] | null;
+  }[];
+  const myEntryIds = new Set(mine.map((e) => e.id));
+  const profileIds = Array.from(
+    new Set(
+      mine.flatMap((e) => (e.schedule_assignments ?? []).map((a) => a.profile_id)),
+    ),
+  );
+  if (profileIds.length === 0) return {};
+
+  // Every stop those people are assigned to, on any event, with windows + names.
+  const { data: allData, error: allError } = await supabase
+    .from("schedule_assignments")
+    .select(
+      "profile_id, profiles(full_name), schedule_entries(id, event_id, type, scheduled_start, scheduled_end, events(title))",
+    )
+    .in("profile_id", profileIds);
+  if (allError) throw new Error(allError.message);
+
+  type AssignRow = {
+    profile_id: string;
+    profiles: { full_name: string | null } | null;
+    schedule_entries: {
+      id: string;
+      event_id: string;
+      type: string | null;
+      scheduled_start: string | null;
+      scheduled_end: string | null;
+      events: { title: string | null } | null;
+    } | null;
+  };
+
+  const entries = new Map<string, SchedulingEntry>();
+  for (const row of (allData ?? []) as unknown as AssignRow[]) {
+    const se = row.schedule_entries;
+    if (!se) continue;
+    const existing = entries.get(se.id);
+    const assignment = {
+      profile_id: row.profile_id,
+      staff_name: row.profiles?.full_name ?? null,
+    };
+    if (existing) {
+      existing.assignments?.push(assignment);
+    } else {
+      entries.set(se.id, {
+        id: se.id,
+        event_id: se.event_id,
+        event_title: se.events?.title ?? null,
+        type: se.type,
+        scheduled_start: se.scheduled_start,
+        scheduled_end: se.scheduled_end,
+        assignments: [assignment],
+      });
+    }
+  }
+
+  const { byEntry } = computeCrewConflicts(Array.from(entries.values()));
+  // Only return conflicts attached to this event's own stops.
+  const result: Record<string, CrewConflict[]> = {};
+  for (const [entryId, conflicts] of Object.entries(byEntry)) {
+    if (myEntryIds.has(entryId)) result[entryId] = conflicts;
+  }
+  return result;
 }
 
 /**

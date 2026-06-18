@@ -8,6 +8,7 @@ import {
   listStaff,
   checkAvailability,
   listEventInvoices,
+  getEventCrewConflicts,
 } from "@/lib/events/queries";
 import { listInventory } from "@/lib/inventory/queries";
 import { listEventVendors, listVendorsForPicker } from "@/lib/vendors/queries";
@@ -135,12 +136,13 @@ export default async function EventDetailPage({
 
   // Vendors tied to this job + the active-vendor picker source for the panel,
   // plus the service tickets logged against this job for the servicing panel.
-  const [eventVendors, vendorOptions, eventTickets, eventInvoices] =
+  const [eventVendors, vendorOptions, eventTickets, eventInvoices, crewConflicts] =
     await Promise.all([
       listEventVendors(ev.id),
       listVendorsForPicker(),
       listEventTickets(ev.id),
       listEventInvoices(ev.id),
+      getEventCrewConflicts(ev.id),
     ]);
 
   // Compute availability per distinct event-item inventory_item_id over the job
@@ -277,7 +279,7 @@ export default async function EventDetailPage({
           inventory={inventory}
         />
 
-        <TimelinePanel ev={ev} staff={staff} />
+        <TimelinePanel ev={ev} staff={staff} crewConflicts={crewConflicts} />
 
         <EventVendorsPanel
           eventId={ev.id}
