@@ -4,7 +4,7 @@ import { requireModule } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listInventory, listCategories } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
-import { InventoryTable } from "@/components/inventory/inventory-table";
+import { InventoryBrowser } from "@/components/inventory/inventory-browser";
 import { NewItemForm } from "@/components/inventory/new-item-form";
 import { CsvImport } from "@/components/inventory/csv-import";
 
@@ -39,19 +39,14 @@ export default async function InventoryPage() {
         <EmptyState categories={categories} locationOptions={locationOptions} />
       ) : (
         <div className="flex flex-col gap-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="text-sm text-muted">
-              {rows.length} {rows.length === 1 ? "item" : "items"}
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <CsvImport />
-              <NewItemForm
-                categories={categories}
-                locationOptions={locationOptions}
-              />
-            </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <CsvImport />
+            <NewItemForm
+              categories={categories}
+              locationOptions={locationOptions}
+            />
           </div>
-          <InventoryTable rows={rows} />
+          <InventoryBrowser rows={rows} />
         </div>
       )}
     </>
