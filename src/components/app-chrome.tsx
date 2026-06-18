@@ -41,14 +41,14 @@ export function AppChrome({
   }, [open]);
 
   return (
-    <div className="flex h-svh flex-col overflow-hidden lg:flex-row">
+    <div className="flex h-svh flex-col overflow-hidden lg:flex-row print:block print:h-auto print:overflow-visible">
       {/* Desktop: static left sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card lg:flex print:lg:hidden">
         <SidebarContent role={role} name={name} email={email} />
       </aside>
 
       {/* Mobile: sticky top bar */}
-      <header className="sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-line bg-card px-4 py-3 lg:hidden">
+      <header className="sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-line bg-card px-4 py-3 lg:hidden print:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -136,8 +136,8 @@ export function AppChrome({
       </div>
 
       {/* Content pane */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden">
-        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden print:overflow-visible">
+        <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10 print:max-w-none print:p-0">
           {children}
         </main>
       </div>

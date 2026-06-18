@@ -13,6 +13,7 @@ import {
 import { InvoiceStatusControl } from "@/components/accounting/invoice-status-control";
 import { PaymentForm } from "@/components/accounting/payment-form";
 import { StripeLinkButton } from "@/components/accounting/stripe-link-button";
+import { PrintInvoiceButton } from "@/components/accounting/print-invoice-button";
 
 export const metadata: Metadata = { title: "Invoice" };
 
@@ -47,27 +48,58 @@ export default async function InvoiceDetailPage({
     <>
       <Link
         href="/accounting/invoices"
-        className="mb-4 inline-block text-sm text-muted underline-offset-2 transition hover:text-navy"
+        className="mb-4 inline-block text-sm text-muted underline-offset-2 transition hover:text-navy print:hidden"
       >
         ← Invoices
       </Link>
-      <PageHeader
-        eyebrow="Accounting"
-        title={invoice.invoice_number ?? `Invoice ${invoice.id.slice(0, 8)}`}
-        description={
-          links.length > 0
-            ? links.map((l) => l.label).join(" · ")
-            : "No linked client."
-        }
-        action={
-          <div className="flex items-center gap-3">
-            <InvoiceStatusBadge status={invoice.status} />
-            <InvoiceStatusControl id={invoice.id} status={invoice.status} />
-          </div>
-        }
-      />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Print-only document header (hidden on screen). */}
+      <div className="mb-8 hidden border-b border-line pb-6 print:block">
+        <p className="font-display text-2xl font-light text-navy">
+          Elite Events LA
+        </p>
+        <div className="mt-4 flex justify-between gap-6 text-sm">
+          <div>
+            <p className="eyebrow">Bill to</p>
+            <p className="mt-1 text-ink">
+              {links.length > 0
+                ? links.map((l) => l.label).join(" · ")
+                : "—"}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="font-display text-xl font-light text-navy">
+              Invoice{" "}
+              {invoice.invoice_number ?? invoice.id.slice(0, 8)}
+            </p>
+            <p className="mt-1 text-muted">
+              Issued {formatDate(invoice.issued_date)} · Due{" "}
+              {formatDate(invoice.due_date)}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="print:hidden">
+        <PageHeader
+          eyebrow="Accounting"
+          title={invoice.invoice_number ?? `Invoice ${invoice.id.slice(0, 8)}`}
+          description={
+            links.length > 0
+              ? links.map((l) => l.label).join(" · ")
+              : "No linked client."
+          }
+          action={
+            <div className="flex items-center gap-3">
+              <InvoiceStatusBadge status={invoice.status} />
+              <InvoiceStatusControl id={invoice.id} status={invoice.status} />
+              <PrintInvoiceButton />
+            </div>
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 print:block print:space-y-6">
         {/* Main: line items + totals */}
         <div className="flex flex-col gap-6 lg:col-span-2">
           <div className="overflow-hidden rounded-(--radius-card) border border-line bg-card">
@@ -152,7 +184,7 @@ export default async function InvoiceDetailPage({
           </div>
 
           {/* Payments */}
-          <div className="rounded-(--radius-card) border border-line bg-card p-6">
+          <div className="rounded-(--radius-card) border border-line bg-card p-6 print:hidden">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-display text-xl font-light text-navy">
                 Payments
@@ -222,7 +254,7 @@ export default async function InvoiceDetailPage({
             )}
           </div>
 
-          <div className="rounded-(--radius-card) border border-line bg-card p-6">
+          <div className="rounded-(--radius-card) border border-line bg-card p-6 print:hidden">
             <h2 className="eyebrow mb-3">Collect payment</h2>
             <StripeLinkButton invoiceId={invoice.id} />
           </div>
