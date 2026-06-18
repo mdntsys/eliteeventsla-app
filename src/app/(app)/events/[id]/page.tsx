@@ -2,7 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModule } from "@/lib/auth/dal";
-import { getEvent, listStaff, checkAvailability } from "@/lib/events/queries";
+import { canAccess } from "@/lib/auth/roles";
+import {
+  getEvent,
+  listStaff,
+  checkAvailability,
+  listEventInvoices,
+} from "@/lib/events/queries";
 import { listInventory } from "@/lib/inventory/queries";
 import { listEventVendors, listVendorsForPicker } from "@/lib/vendors/queries";
 import { listEventTickets } from "@/lib/servicing/queries";
@@ -16,6 +22,7 @@ import { EventTicketsPanel } from "@/components/servicing/event-tickets-panel";
 import { JobStageTracker } from "@/components/events/job-stage-tracker";
 import { ReadinessChecklist } from "@/components/events/readiness-checklist";
 import { ProfitabilitySummary } from "@/components/events/profitability-summary";
+import { EventBillingPanel } from "@/components/events/event-billing-panel";
 import {
   deriveStage,
   computeReadiness,
@@ -114,8 +121,9 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("events");
+  const profile = await requireModule("events");
   const { id } = await params;
+  const canBill = canAccess(profile.role, "accounting");
 
   const [ev, staff, inventory] = await Promise.all([
     getEvent(id),
@@ -127,11 +135,13 @@ export default async function EventDetailPage({
 
   // Vendors tied to this job + the active-vendor picker source for the panel,
   // plus the service tickets logged against this job for the servicing panel.
-  const [eventVendors, vendorOptions, eventTickets] = await Promise.all([
-    listEventVendors(ev.id),
-    listVendorsForPicker(),
-    listEventTickets(ev.id),
-  ]);
+  const [eventVendors, vendorOptions, eventTickets, eventInvoices] =
+    await Promise.all([
+      listEventVendors(ev.id),
+      listVendorsForPicker(),
+      listEventTickets(ev.id),
+      listEventInvoices(ev.id),
+    ]);
 
   // Compute availability per distinct event-item inventory_item_id over the job
   // window. excludeEventId is left undefined so this job's own reserved units
@@ -171,6 +181,10 @@ export default async function EventDetailPage({
   });
   const showProfitability =
     profitability.revenue !== 0 || profitability.vendorCost !== 0;
+
+  // Billing panel: show once there's something to bill (a price or any invoice).
+  const showBilling =
+    eventInvoices.length > 0 || (ev.total_amount ?? 0) > 0;
 
   return (
     <>
@@ -252,6 +266,10 @@ export default async function EventDetailPage({
         </section>
 
         {showProfitability && <ProfitabilitySummary data={profitability} />}
+
+        {showBilling && (
+          <EventBillingPanel invoices={eventInvoices} canBill={canBill} />
+        )}
 
         <InventoryPanel
           ev={ev}

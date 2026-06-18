@@ -7,6 +7,7 @@ import type {
   AssignmentRow,
   AttachmentRow,
   EventDetail,
+  EventInvoiceRow,
   EventItemRow,
   EventListRow,
   ScheduleEntryRow,
@@ -435,4 +436,24 @@ export async function listScheduleInRange(
       event_type: events?.event_type ?? "other",
     };
   });
+}
+
+/**
+ * Invoices billed against an event, newest first — powers the event hub's
+ * billing-readiness panel. Readable by any role (broad RLS read); writes stay
+ * accounting/admin, so the panel only links into Accounting for those roles.
+ */
+export async function listEventInvoices(
+  eventId: string,
+): Promise<EventInvoiceRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(
+      "id, invoice_number, status, total_amount, amount_paid, due_date, issued_date",
+    )
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as EventInvoiceRow[];
 }

@@ -10,6 +10,18 @@ import type { Database } from "@/lib/database.types";
 
 export type EventRow = Database["public"]["Tables"]["events"]["Row"];
 export type EventItem = Database["public"]["Tables"]["event_items"]["Row"];
+
+/** Slim invoice shape for the event hub's billing-readiness panel. */
+export type EventInvoiceRow = {
+  id: string;
+  invoice_number: string | null;
+  status: Database["public"]["Enums"]["invoice_status"];
+  total_amount: number;
+  amount_paid: number;
+  due_date: string | null;
+  issued_date: string | null;
+};
+
 export type ScheduleEntry =
   Database["public"]["Tables"]["schedule_entries"]["Row"];
 export type ScheduleAssignment =
