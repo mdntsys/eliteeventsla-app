@@ -1,29 +1,53 @@
 import type { Metadata } from "next";
 import { requireModule } from "@/lib/auth/dal";
+import {
+  listPipeline,
+  listContactOptions,
+  listCompanyOptions,
+  listPipelineStages,
+} from "@/lib/crm/queries";
 import { PageHeader } from "@/components/ui/page-header";
-import { ModulePlaceholder } from "@/components/ui/module-placeholder";
+import { PipelineBoard } from "@/components/crm/pipeline-board";
+import { DealForm } from "@/components/crm/deal-form";
 
 export const metadata: Metadata = { title: "Pipeline" };
 
 export default async function CrmPipelinePage() {
   await requireModule("crm");
+
+  const [columns, contacts, companies, stages] = await Promise.all([
+    listPipeline(),
+    listContactOptions(),
+    listCompanyOptions(),
+    listPipelineStages(),
+  ]);
+
+  const stageOptions = stages.map((s) => ({ id: s.id, label: s.name }));
+
+  const totalDeals = columns.reduce((n, c) => n + c.deals.length, 0);
+
   return (
     <>
       <PageHeader
         eyebrow="CRM"
         title="Pipeline"
         description="Track inquiries through stages from New Inquiry to Won, and convert won deals into events."
+        action={
+          <DealForm
+            contacts={contacts}
+            companies={companies}
+            stages={stageOptions}
+          />
+        }
       />
-      <ModulePlaceholder
-        items={[
-          "Kanban board by pipeline stage",
-          "Drag deals between stages",
-          "Deal value & expected event date",
-          "Convert won deal → event/job",
-          "Owner & source filters",
-          "Stage configuration (admin)",
-        ]}
-      />
+
+      {totalDeals === 0 ? (
+        <p className="rounded-(--radius-card) border border-dashed border-line bg-cream px-4 py-10 text-center text-sm text-muted">
+          No deals yet. Create your first deal to start the pipeline.
+        </p>
+      ) : (
+        <PipelineBoard columns={columns} />
+      )}
     </>
   );
 }
