@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireModule } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/vendors/types";
+import { notifyVendorConfirmationRequest } from "@/lib/email/send";
 
 /**
  * Server actions for the vendors module. Every action gates on
@@ -273,6 +274,30 @@ export async function addEventVendor(
       return { error: "That vendor is already on this event." };
     }
     return { error: error.message };
+  }
+
+  // Fire-and-forget: ask the vendor to confirm the booking.
+  try {
+    const [{ data: vendor }, { data: ev }] = await Promise.all([
+      supabase
+        .from("vendors")
+        .select("name, email")
+        .eq("id", data.vendor_id)
+        .maybeSingle(),
+      supabase
+        .from("events")
+        .select("title, event_date")
+        .eq("id", data.event_id)
+        .maybeSingle(),
+    ]);
+    await notifyVendorConfirmationRequest(vendor?.email, {
+      vendorName: vendor?.name ?? "there",
+      eventTitle: ev?.title ?? "an upcoming event",
+      service: data.service ?? null,
+      eventDate: ev?.event_date ?? null,
+    });
+  } catch (e) {
+    console.error("[email] vendor-confirmation trigger failed:", e);
   }
 
   revalidatePath(`/events/${data.event_id}`);

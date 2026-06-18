@@ -1,0 +1,114 @@
+/**
+ * Transactional email templates (pure render functions — no I/O). Each returns
+ * { subject, html, text }. HTML uses inline styles in the brand palette so it
+ * renders in email clients. Kept deliberately simple and on-brand.
+ */
+
+export type RenderedEmail = { subject: string; html: string; text: string };
+
+const NAVY = "#16263a";
+const CREAM = "#f4f1ea";
+const CARD = "#faf8f3";
+const INK = "#22211d";
+const MUTED = "#6f6a60";
+const LINE = "#ddd7ca";
+
+function formatDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** Branded HTML shell around a body. */
+function layout(heading: string, bodyHtml: string): string {
+  return `<!doctype html><html><body style="margin:0;background:${CREAM};padding:24px;font-family:Helvetica,Arial,sans-serif;color:${INK};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;">
+    <tr><td style="padding:8px 4px 16px;">
+      <span style="font-family:Georgia,'Times New Roman',serif;font-size:20px;color:${NAVY};letter-spacing:0.5px;">Elite Events LA</span>
+    </td></tr>
+    <tr><td style="background:${CARD};border:1px solid ${LINE};border-radius:14px;padding:28px;">
+      <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-weight:400;font-size:24px;color:${NAVY};">${heading}</h1>
+      ${bodyHtml}
+    </td></tr>
+    <tr><td style="padding:16px 4px;color:${MUTED};font-size:12px;">
+      Elite Events LA · This is an automated message from our operations system.
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+const P = `style="margin:0 0 14px;font-size:15px;line-height:1.55;color:${INK};"`;
+const META = `style="margin:0 0 6px;font-size:14px;color:${MUTED};"`;
+
+export function bookingConfirmedEmail(p: {
+  eventTitle: string;
+  eventDate?: string | null;
+  recipientName?: string | null;
+}): RenderedEmail {
+  const date = formatDate(p.eventDate);
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const html = layout("Your event is confirmed", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Great news — <strong>${p.eventTitle}</strong> is confirmed. Our team is preparing everything for your event${date ? ` on <strong>${date}</strong>` : ""}.</p>
+    <p ${P}>We'll be in touch with delivery and setup details as your date approaches. Reply to this email anytime with questions.</p>
+    <p ${P}>Thank you for choosing Elite Events LA.</p>`);
+  const text = `${hi}\n\nGreat news — ${p.eventTitle} is confirmed${date ? ` on ${date}` : ""}. Our team is preparing everything. We'll follow up with delivery and setup details.\n\nThank you for choosing Elite Events LA.`;
+  return { subject: `Confirmed: ${p.eventTitle}`, html, text };
+}
+
+export function vendorConfirmationRequestEmail(p: {
+  vendorName: string;
+  eventTitle: string;
+  service?: string | null;
+  eventDate?: string | null;
+}): RenderedEmail {
+  const date = formatDate(p.eventDate);
+  const html = layout("Can you confirm this booking?", `
+    <p ${P}>Hi ${p.vendorName},</p>
+    <p ${P}>We'd like to book you for <strong>${p.eventTitle}</strong>${p.service ? ` (${p.service})` : ""}${date ? ` on <strong>${date}</strong>` : ""}.</p>
+    <p ${P}>Please reply to confirm your availability and we'll send over the details. Thanks for partnering with us!</p>`);
+  const text = `Hi ${p.vendorName},\n\nWe'd like to book you for ${p.eventTitle}${p.service ? ` (${p.service})` : ""}${date ? ` on ${date}` : ""}. Please reply to confirm your availability.\n\nThanks for partnering with Elite Events LA.`;
+  return {
+    subject: `Booking request: ${p.eventTitle}`,
+    html,
+    text,
+  };
+}
+
+export function crewAssignmentEmail(p: {
+  staffName?: string | null;
+  eventTitle: string;
+  role?: string | null;
+  whenText?: string | null;
+}): RenderedEmail {
+  const when = formatDate(p.whenText);
+  const hi = p.staffName ? `Hi ${p.staffName},` : "Hi,";
+  const html = layout("You're on a job", `
+    <p ${P}>${hi}</p>
+    <p ${P}>You've been assigned to <strong>${p.eventTitle}</strong>.</p>
+    ${p.role ? `<p ${META}>Role: ${p.role}</p>` : ""}
+    ${when ? `<p ${META}>When: ${when}</p>` : ""}
+    <p ${P}>Check the operations dashboard for the full schedule and details.</p>`);
+  const text = `${hi}\n\nYou've been assigned to ${p.eventTitle}.${p.role ? `\nRole: ${p.role}` : ""}${when ? `\nWhen: ${when}` : ""}\n\nCheck the operations dashboard for details.`;
+  return { subject: `Crew assignment: ${p.eventTitle}`, html, text };
+}
+
+export function returnReceiptEmail(p: {
+  eventTitle: string;
+  recipientName?: string | null;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const html = layout("All items returned", `
+    <p ${P}>${hi}</p>
+    <p ${P}>This confirms that all rental items for <strong>${p.eventTitle}</strong> have been returned and checked in. Your job is now complete.</p>
+    <p ${P}>It was a pleasure working with you — we'd love to help with your next event.</p>`);
+  const text = `${hi}\n\nThis confirms that all rental items for ${p.eventTitle} have been returned and checked in. Your job is complete.\n\nWe'd love to help with your next event — Elite Events LA.`;
+  return { subject: `Return receipt: ${p.eventTitle}`, html, text };
+}

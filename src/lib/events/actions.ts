@@ -6,6 +6,11 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireModule } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/events/types";
+import {
+  notifyBookingConfirmed,
+  notifyCrewAssignment,
+  notifyReturnReceipt,
+} from "@/lib/email/send";
 
 /**
  * Server actions for the event/job lifecycle. Every action gates with
@@ -282,6 +287,31 @@ export async function setEventStatus(
     return { error: error.message };
   }
 
+  // Fire-and-forget: email the client when their job is confirmed.
+  if (data.status === "confirmed") {
+    try {
+      const { data: ev } = await supabase
+        .from("events")
+        .select("title, event_date, contact_id")
+        .eq("id", data.event_id)
+        .maybeSingle();
+      if (ev?.contact_id) {
+        const { data: contact } = await supabase
+          .from("contacts")
+          .select("email, first_name")
+          .eq("id", ev.contact_id)
+          .maybeSingle();
+        await notifyBookingConfirmed(contact?.email, {
+          eventTitle: ev?.title ?? "your event",
+          eventDate: ev?.event_date ?? null,
+          recipientName: contact?.first_name ?? null,
+        });
+      }
+    } catch (e) {
+      console.error("[email] booking-confirmed trigger failed:", e);
+    }
+  }
+
   revalidatePath(`/events/${data.event_id}`);
   revalidatePath("/events");
   return { success: true };
@@ -469,14 +499,36 @@ export async function assignStaff(
     return { error: error.message };
   }
 
-  // Resolve the parent event to revalidate its hub page.
+  // Resolve the parent event to revalidate its hub page + notify the crew member.
   const { data: entry } = await supabase
     .from("schedule_entries")
-    .select("event_id")
+    .select("event_id, scheduled_start")
     .eq("id", data.schedule_entry_id)
     .maybeSingle();
   if (entry?.event_id) {
     revalidatePath(`/events/${entry.event_id}`);
+    try {
+      const [{ data: prof }, { data: ev }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("email, full_name")
+          .eq("id", data.profile_id)
+          .maybeSingle(),
+        supabase
+          .from("events")
+          .select("title")
+          .eq("id", entry.event_id)
+          .maybeSingle(),
+      ]);
+      await notifyCrewAssignment(prof?.email, {
+        staffName: prof?.full_name ?? null,
+        eventTitle: ev?.title ?? "a job",
+        role: data.role_on_job ?? null,
+        whenText: entry.scheduled_start ?? null,
+      });
+    } catch (e) {
+      console.error("[email] crew-assignment trigger failed:", e);
+    }
   }
   revalidatePath("/operations/scheduling");
   return { success: true };
@@ -639,6 +691,27 @@ export async function checkInItem(
         .from("events")
         .update({ status: "completed" })
         .eq("id", updated.event_id);
+      // All items back → email the client a return receipt.
+      try {
+        const { data: ev } = await supabase
+          .from("events")
+          .select("title, contact_id")
+          .eq("id", updated.event_id)
+          .maybeSingle();
+        if (ev?.contact_id) {
+          const { data: contact } = await supabase
+            .from("contacts")
+            .select("email, first_name")
+            .eq("id", ev.contact_id)
+            .maybeSingle();
+          await notifyReturnReceipt(contact?.email, {
+            eventTitle: ev?.title ?? "your event",
+            recipientName: contact?.first_name ?? null,
+          });
+        }
+      } catch (e) {
+        console.error("[email] return-receipt trigger failed:", e);
+      }
     }
   }
 
