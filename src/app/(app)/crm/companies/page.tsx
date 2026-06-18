@@ -1,17 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { requireModule } from "@/lib/auth/dal";
 import { listCompanies, listStaffOptions } from "@/lib/crm/queries";
-import type { CompanyListRow } from "@/lib/crm/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { CompanyForm } from "@/components/crm/company-form";
+import { CompaniesList } from "@/components/crm/companies-list";
 
 export const metadata: Metadata = { title: "Companies" };
-
-function location(row: CompanyListRow): string | null {
-  const parts = [row.city, row.state].filter(Boolean);
-  return parts.length ? parts.join(", ") : null;
-}
 
 export default async function CompaniesPage() {
   await requireModule("crm");
@@ -31,77 +25,9 @@ export default async function CompaniesPage() {
       />
 
       <div className="flex flex-col gap-6">
-        {rows.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <>
-            <p className="text-sm text-muted">
-              {rows.length} {rows.length === 1 ? "company" : "companies"}
-            </p>
-            <CompanyTable rows={rows} />
-          </>
-        )}
+        {rows.length === 0 ? <EmptyState /> : <CompaniesList rows={rows} />}
       </div>
     </>
-  );
-}
-
-function CompanyTable({ rows }: { rows: CompanyListRow[] }) {
-  return (
-    <div className="overflow-hidden rounded-(--radius-card) border border-line bg-card">
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-line text-left">
-              <th className="px-4 py-3 font-medium text-muted">
-                <span className="eyebrow">Name</span>
-              </th>
-              <th className="px-4 py-3 font-medium text-muted">
-                <span className="eyebrow">Industry</span>
-              </th>
-              <th className="px-4 py-3 font-medium text-muted">
-                <span className="eyebrow">Location</span>
-              </th>
-              <th className="px-4 py-3 text-right font-medium text-muted">
-                <span className="eyebrow">Contacts</span>
-              </th>
-              <th className="px-4 py-3 text-right font-medium text-muted">
-                <span className="eyebrow">Deals</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-line transition last:border-b-0 hover:bg-cream"
-              >
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/crm/companies/${row.id}`}
-                    className="font-medium text-navy underline-offset-2 hover:underline"
-                  >
-                    {row.name}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-ink">
-                  {row.industry ?? <span className="text-muted">—</span>}
-                </td>
-                <td className="px-4 py-3 text-ink">
-                  {location(row) ?? <span className="text-muted">—</span>}
-                </td>
-                <td className="px-4 py-3 text-right text-ink tabular-nums">
-                  {row.contact_count}
-                </td>
-                <td className="px-4 py-3 text-right text-ink tabular-nums">
-                  {row.deal_count}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
   );
 }
 
