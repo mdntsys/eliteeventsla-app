@@ -7,6 +7,7 @@ import { listLocationOptions } from "@/lib/locations/queries";
 import { InventoryBrowser } from "@/components/inventory/inventory-browser";
 import { NewItemForm } from "@/components/inventory/new-item-form";
 import { CsvImport } from "@/components/inventory/csv-import";
+import { CsvExport } from "@/components/inventory/csv-export";
 
 export const metadata: Metadata = { title: "Inventory" };
 
@@ -40,6 +41,7 @@ export default async function InventoryPage() {
       ) : (
         <div className="flex flex-col gap-6">
           <div className="flex flex-wrap items-center justify-end gap-3">
+            <CsvExport rows={rows} />
             <CsvImport />
             <NewItemForm
               categories={categories}
