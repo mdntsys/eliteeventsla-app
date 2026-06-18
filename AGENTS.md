@@ -11,6 +11,12 @@ Deploys to **app.eliteeventsla.com**. This is a **separate** repo/app from the m
 site in `../Website`; it holds client PII and payment secrets, so it keeps its own repo,
 deployment, and auth. Do not couple the two — brand tokens were one-time-copied, not shared.
 
+## Project docs (read to orient — especially in a fresh session)
+- **`docs/STATUS.md`** — what's built (modules + commit history), schema, blockers, and demo data to leave alone.
+- **`docs/PATTERNS.md`** — how the codebase is structured + the conventions every module follows when building.
+- **`docs/AUTOPILOT-GUIDE.md`** — the perpetual autonomous build/improve loop: how it works, how to run it
+  (terminal CLI), how to steer/stop it. The live brain is `AUTOPILOT.md` (repo root, **gitignored** — local creds + run log).
+
 ## Stack
 - **Next.js 16.2.9** (App Router) · React 19.2 · TypeScript · Tailwind v4 (CSS-first)
 - **Supabase** — Auth + Postgres + RLS + Storage, via `@supabase/ssr` (cookie sessions)
