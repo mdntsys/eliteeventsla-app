@@ -1737,6 +1737,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_edit_module: { Args: { m: string }; Returns: boolean }
+      can_view_module: { Args: { m: string }; Returns: boolean }
       current_app_role: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
