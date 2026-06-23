@@ -112,3 +112,22 @@ export function returnReceiptEmail(p: {
   const text = `${hi}\n\nThis confirms that all rental items for ${p.eventTitle} have been returned and checked in. Your job is complete.\n\nWe'd love to help with your next event — Elite Events LA.`;
   return { subject: `Return receipt: ${p.eventTitle}`, html, text };
 }
+
+export function welcomeEmail(p: {
+  fullName?: string | null;
+  email: string;
+  tempPassword: string;
+  signInUrl: string;
+}): RenderedEmail {
+  const hi = p.fullName ? `Hi ${p.fullName},` : "Hello,";
+  const button = `<a href="${p.signInUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;font-size:14px;">Sign in</a>`;
+  const html = layout("You've been added to Elite Events LA", `
+    <p ${P}>${hi}</p>
+    <p ${P}>An account was created for you on the Elite Events LA Operations system. Sign in with these credentials:</p>
+    <p ${META}>Email: <strong>${p.email}</strong></p>
+    <p ${META}>Temporary password: <strong>${p.tempPassword}</strong></p>
+    <p style="margin:18px 0;">${button}</p>
+    <p ${P}>For your security, please change your password right after signing in — open <strong>Account</strong> in the sidebar, then <strong>Change password</strong>.</p>`);
+  const text = `${hi}\n\nAn account was created for you on Elite Events LA Operations.\n\nSign in: ${p.signInUrl}\nEmail: ${p.email}\nTemporary password: ${p.tempPassword}\n\nPlease change your password after signing in (Account → Change password).`;
+  return { subject: "Your Elite Events LA account", html, text };
+}

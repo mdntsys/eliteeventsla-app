@@ -12,6 +12,10 @@ import {
   type Area,
   type AppRole,
 } from "@/lib/auth/roles";
+import { sendEmail } from "@/lib/email/send";
+import { welcomeEmail } from "@/lib/email/templates";
+import { headers } from "next/headers";
+import { randomBytes } from "crypto";
 
 /**
  * Write paths for the Team console. EVERY action gates on requireSuperAdmin()
@@ -21,7 +25,9 @@ import {
  * service-role client (and degrades gracefully if the key is absent).
  */
 
-export type ActionState = { error?: string; success?: boolean } | undefined;
+export type ActionState =
+  | { error?: string; success?: boolean; notice?: string }
+  | undefined;
 
 const roleEnum = z.enum(APP_ROLES);
 const areaEnum = z.enum(AREAS);
@@ -239,9 +245,12 @@ const InviteSchema = z.object({
 });
 
 /**
- * Invite a user by email. Public signup is disabled, so this uses the
- * SERVICE-ROLE admin client to send a Supabase invite. If the service-role key
- * is not configured, returns a friendly error rather than crashing.
+ * Invite a user by email. Public signup is disabled, so we create the account
+ * with the SERVICE-ROLE admin client (a strong temp password, email pre-confirmed),
+ * set their role via the SUPER ADMIN's own session (the service client has no
+ * auth.uid(), so the privilege trigger would block a role change), and email a
+ * branded welcome with the temp password + a link, via Resend. Degrades
+ * gracefully if the service-role key (or Resend) is absent.
  *
  * Bound via useActionState (prev, formData).
  */
@@ -271,26 +280,60 @@ export async function inviteUser(
     return { error: "Add SUPABASE_SERVICE_ROLE_KEY to create users." };
   }
 
-  const { data: invited, error } = await service.auth.admin.inviteUserByEmail(
+  const tempPassword = "Elite2026!" + randomBytes(4).toString("hex");
+  const { data: created, error } = await service.auth.admin.createUser({
     email,
-    fullName ? { data: { full_name: fullName } } : undefined,
-  );
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: fullName ? { full_name: fullName } : undefined,
+  });
 
   if (error) {
-    return { error: error.message };
+    const exists = /already|registered|exists/i.test(error.message);
+    return { error: exists ? "That email already has an account." : error.message };
   }
 
-  // The handle_new_user trigger seeds the profiles row (role NULL by default).
-  // If the inviter chose a role, set it now. Set the name too if provided and
-  // the trigger didn't capture it.
-  const newId = invited?.user?.id;
+  // Set role + name via the SUPER ADMIN's session (RLS + the privilege trigger
+  // allow it; the service client would be blocked since it has no auth.uid()).
+  const newId = created?.user?.id;
   if (newId && (role || fullName)) {
+    const supabase = await createClient();
     const update: { role?: AppRole; full_name?: string } = {};
     if (role) update.role = role;
     if (fullName) update.full_name = fullName;
-    await service.from("profiles").update(update).eq("id", newId);
+    await supabase.from("profiles").update(update).eq("id", newId);
   }
 
+  // Branded welcome email (temp password + sign-in link) via Resend.
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "app.eliteeventsla.com";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const sent = await sendEmail({
+    to: email,
+    ...welcomeEmail({
+      fullName,
+      email,
+      tempPassword,
+      signInUrl: `${proto}://${host}/login`,
+    }),
+  });
+
   revalidatePath("/admin/team");
-  return { success: true };
+
+  if (sent.skipped) {
+    return {
+      success: true,
+      notice: `Created ${email}. Email is off (no RESEND_API_KEY) — temporary password: ${tempPassword}`,
+    };
+  }
+  if (!sent.ok) {
+    return {
+      success: true,
+      notice: `Created ${email}, but the welcome email failed (${sent.error ?? "unknown"}). Share this temporary password manually: ${tempPassword}`,
+    };
+  }
+  return {
+    success: true,
+    notice: `Invited ${email} — a welcome email with their temporary password was sent.`,
+  };
 }
