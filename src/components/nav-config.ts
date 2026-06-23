@@ -1,53 +1,61 @@
-import type { ModuleKey } from "@/lib/auth/roles";
+import type { Area } from "@/lib/auth/roles";
 
-export type NavItem = { label: string; href: string };
-export type NavSection = { label: string; module: ModuleKey; items: NavItem[] };
+/**
+ * Each nav ITEM carries its own Area; the sidebar filters items by canView(area)
+ * and drops any section left with no visible items. The "Admin" section has no
+ * area — it is super-admin-only and gated by is_super_admin in the sidebar.
+ */
+export type NavItem = { label: string; href: string; area: Area };
+export type NavSection = {
+  label: string;
+  items: NavItem[];
+  /** When true, the whole section is shown only to super admins (Team console). */
+  superAdminOnly?: boolean;
+};
 
-/** Sidebar structure. Each section is gated by its `module` via canAccess(). */
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    module: "dashboard",
-    items: [{ label: "Dashboard", href: "/dashboard" }],
+    items: [{ label: "Dashboard", href: "/dashboard", area: "dashboard" }],
   },
   {
     label: "CRM",
-    module: "crm",
     items: [
-      { label: "Pipeline", href: "/crm" },
-      { label: "Contacts", href: "/crm/contacts" },
-      { label: "Companies", href: "/crm/companies" },
-      { label: "Deals", href: "/crm/deals" },
-      { label: "Quotes", href: "/crm/quotes" },
+      { label: "Pipeline", href: "/crm", area: "crm" },
+      { label: "Contacts", href: "/crm/contacts", area: "crm" },
+      { label: "Companies", href: "/crm/companies", area: "crm" },
+      { label: "Deals", href: "/crm/deals", area: "crm" },
+      { label: "Quotes", href: "/crm/quotes", area: "quotes" },
     ],
   },
   {
     label: "Events",
-    module: "events",
-    items: [{ label: "Events & Jobs", href: "/events" }],
+    items: [{ label: "Events & Jobs", href: "/events", area: "events" }],
   },
   {
     label: "Operations",
-    module: "operations",
     items: [
-      { label: "Inventory", href: "/operations/inventory" },
-      { label: "Scheduling", href: "/operations/scheduling" },
-      { label: "Vendors", href: "/operations/vendors" },
-      { label: "Servicing", href: "/operations/servicing" },
+      { label: "Inventory", href: "/operations/inventory", area: "inventory" },
+      {
+        label: "Scheduling",
+        href: "/operations/scheduling",
+        area: "scheduling",
+      },
+      { label: "Vendors", href: "/operations/vendors", area: "vendors" },
+      { label: "Servicing", href: "/operations/servicing", area: "servicing" },
     ],
   },
   {
     label: "Accounting",
-    module: "accounting",
     items: [
-      { label: "Overview", href: "/accounting" },
-      { label: "Invoices", href: "/accounting/invoices" },
-      { label: "Payments", href: "/accounting/payments" },
+      { label: "Overview", href: "/accounting", area: "accounting" },
+      { label: "Invoices", href: "/accounting/invoices", area: "accounting" },
+      { label: "Payments", href: "/accounting/payments", area: "accounting" },
     ],
   },
   {
     label: "Admin",
-    module: "admin",
-    items: [{ label: "Team", href: "/admin/team" }],
+    superAdminOnly: true,
+    items: [{ label: "Team", href: "/admin/team", area: "dashboard" }],
   },
 ];

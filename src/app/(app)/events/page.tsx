@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { listEvents } from "@/lib/events/queries";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -63,7 +63,7 @@ async function loadFormOptions() {
 }
 
 export default async function EventsPage() {
-  await requireModule("events");
+  await requireView("events");
   const [events, options] = await Promise.all([listEvents(), loadFormOptions()]);
 
   return (

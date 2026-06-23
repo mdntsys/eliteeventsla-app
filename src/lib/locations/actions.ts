@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { requireModule } from "@/lib/auth/dal";
+import { requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/locations/types";
 
 /**
  * Server actions for managing structured locations and warehouse rows. Every
- * action gates on requireModule("operations") (defense in depth alongside
+ * action gates on requireEdit("inventory") (defense in depth alongside
  * RLS), validates with zod v4, mutates via the typed server client, revalidates
  * the inventory + locations pages, and returns an ActionState.
  */
@@ -72,7 +72,7 @@ export async function createLocation(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = CreateLocationSchema.safeParse({
     name: formData.get("name"),
@@ -107,7 +107,7 @@ export async function updateLocation(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = UpdateLocationSchema.safeParse({
     id: formData.get("id"),
@@ -148,7 +148,7 @@ export async function deleteLocation(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = DeleteLocationSchema.safeParse({
     id: formData.get("id"),
@@ -176,7 +176,7 @@ export async function addWarehouseRow(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = AddWarehouseRowSchema.safeParse({
     location_id: formData.get("location_id"),
@@ -209,7 +209,7 @@ export async function removeWarehouseRow(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = RemoveWarehouseRowSchema.safeParse({
     id: formData.get("id"),

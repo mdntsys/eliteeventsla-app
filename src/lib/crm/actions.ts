@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/crm/types";
 
 /**
  * Server actions for the CRM module (contacts, companies, deals, pipeline,
- * activities). Every action gates with requireModule("crm") — matching the RLS
+ * activities). Every action gates with requireEdit("crm") — matching the RLS
  * write policy — validates with zod v4, mutates via the typed server client,
  * revalidates affected paths, and returns an ActionState (or redirects).
  */
@@ -185,7 +185,7 @@ export async function createContact(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = CreateContactSchema.safeParse({
     first_name: formData.get("first_name"),
@@ -234,7 +234,7 @@ export async function updateContact(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = UpdateContactSchema.safeParse({
     id: formData.get("id"),
@@ -282,7 +282,7 @@ export async function createCompany(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = CreateCompanySchema.safeParse({
     name: formData.get("name"),
@@ -339,7 +339,7 @@ export async function updateCompany(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = UpdateCompanySchema.safeParse({
     id: formData.get("id"),
@@ -395,7 +395,7 @@ export async function createDeal(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = CreateDealSchema.safeParse({
     title: formData.get("title"),
@@ -451,7 +451,7 @@ export async function updateDeal(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = UpdateDealSchema.safeParse({
     id: formData.get("id"),
@@ -507,7 +507,7 @@ export async function setDealStage(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = SetDealStageSchema.safeParse({
     deal_id: formData.get("deal_id"),
@@ -545,7 +545,7 @@ export async function convertDealToEvent(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = ConvertDealSchema.safeParse({
     deal_id: formData.get("deal_id"),
@@ -608,7 +608,7 @@ export async function logActivity(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = LogActivitySchema.safeParse({
     type: formData.get("type") ?? undefined,
@@ -650,7 +650,7 @@ export async function completeActivity(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("crm");
 
   const parsed = CompleteActivitySchema.safeParse({
     id: formData.get("id"),

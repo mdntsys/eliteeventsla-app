@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import {
   listDeals,
   listContactOptions,
@@ -13,7 +13,7 @@ import { DealsList } from "@/components/crm/deals-list";
 export const metadata: Metadata = { title: "Deals" };
 
 export default async function DealsPage() {
-  await requireModule("crm");
+  await requireView("crm");
 
   const [deals, contacts, companies, stages] = await Promise.all([
     listDeals(),

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { listPayments, listInvoiceOptions } from "@/lib/accounting/queries";
 import { formatMoney, formatDateTime } from "@/lib/accounting/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,7 +13,7 @@ import { PaymentForm } from "@/components/accounting/payment-form";
 export const metadata: Metadata = { title: "Payments" };
 
 export default async function PaymentsPage() {
-  await requireModule("accounting");
+  await requireView("accounting");
 
   const [rows, invoices] = await Promise.all([
     listPayments(),

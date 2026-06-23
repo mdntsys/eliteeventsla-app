@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
 import { PriorityBadge } from "@/components/servicing/priority-badge";
 import { NAV_SECTIONS } from "@/components/nav-config";
-import { canAccess, ROLE_LABELS } from "@/lib/auth/roles";
+import { canView, ROLE_LABELS } from "@/lib/auth/roles";
 import {
   DashboardCard,
   EmptyState,
@@ -66,8 +66,13 @@ function formatShortDate(value: string | null): string {
 
 export default async function DashboardPage() {
   const profile = await requireProfile();
-  const role = profile.role!; // (app)/layout guarantees a non-null role here.
   const firstName = profile.full_name?.split(" ")[0];
+  // Header label: super admins may have a NULL role.
+  const roleLabel = profile.is_super_admin
+    ? "Super Admin"
+    : profile.role
+      ? ROLE_LABELS[profile.role]
+      : "Pending access";
 
   const [logistics, returns, vendors, tickets, jobs, followUps] =
     await Promise.all([
@@ -79,20 +84,22 @@ export default async function DashboardPage() {
       upcomingFollowUps(8),
     ]);
 
-  // Role-aware quick links: the same gating the sidebar uses.
-  const quickLinks = NAV_SECTIONS.filter(
-    (section) =>
-      section.module !== "dashboard" && canAccess(role, section.module),
-  ).flatMap((section) => section.items);
+  // Quick links: the same per-area gating the sidebar uses (excluding the
+  // dashboard itself and super-admin-only sections like Team).
+  const quickLinks = NAV_SECTIONS.filter((section) => !section.superAdminOnly)
+    .flatMap((section) => section.items)
+    .filter((item) => item.area !== "dashboard" && canView(profile, item.area));
 
-  const canOps = canAccess(role, "operations");
-  const canEvents = canAccess(role, "events");
-  const canCrm = canAccess(role, "crm");
+  const canScheduling = canView(profile, "scheduling");
+  const canVendors = canView(profile, "vendors");
+  const canServicing = canView(profile, "servicing");
+  const canEvents = canView(profile, "events");
+  const canCrm = canView(profile, "crm");
 
   return (
     <>
       <PageHeader
-        eyebrow={`Signed in · ${ROLE_LABELS[role]}`}
+        eyebrow={`Signed in · ${roleLabel}`}
         title={firstName ? `Welcome, ${firstName}` : "Welcome"}
         description="Today across the floor — what's moving, what's still out, and who needs a nudge."
       />
@@ -115,7 +122,7 @@ export default async function DashboardPage() {
         {/* Coming up — schedule */}
         <DashboardCard
           title="Coming up"
-          href={canOps ? "/operations/scheduling" : undefined}
+          href={canScheduling ? "/operations/scheduling" : undefined}
           count={logistics.length}
         >
           {logistics.length === 0 ? (
@@ -199,7 +206,7 @@ export default async function DashboardPage() {
         {/* Awaiting vendor confirmation */}
         <DashboardCard
           title="Awaiting vendor confirmation"
-          href={canOps ? "/operations/vendors" : undefined}
+          href={canVendors ? "/operations/vendors" : undefined}
           count={vendors.length}
         >
           {vendors.length === 0 ? (
@@ -239,7 +246,7 @@ export default async function DashboardPage() {
         {/* Urgent tickets */}
         <DashboardCard
           title="Urgent tickets"
-          href={canOps ? "/operations/servicing" : undefined}
+          href={canServicing ? "/operations/servicing" : undefined}
           count={tickets.length}
         >
           {tickets.length === 0 ? (
@@ -249,7 +256,7 @@ export default async function DashboardPage() {
               {tickets.map((item) => (
                 <ListRow key={item.id}>
                   <div className="min-w-0">
-                    {canOps ? (
+                    {canServicing ? (
                       <Link
                         href={`/operations/servicing/${item.id}`}
                         className="block truncate font-medium text-navy underline-offset-2 hover:underline"

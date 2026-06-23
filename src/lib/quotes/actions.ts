@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/quotes/types";
 
 /**
- * Server actions for quotes. Gate on requireModule("crm") (quotes are a CRM
- * artifact), validate with zod, compute totals server-side, and revalidate.
+ * Server actions for quotes. Gate on requireEdit("quotes") (quotes are their
+ * own area), validate with zod, compute totals server-side, and revalidate.
  * convertQuote mirrors convertDealToEvent: it spins up an event + a draft
  * invoice from an accepted quote (admin has rights to all three tables).
  */
@@ -84,7 +84,7 @@ export async function createQuote(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("quotes");
 
   const parsed = CreateQuoteSchema.safeParse({
     title: formData.get("title"),
@@ -173,7 +173,7 @@ export async function setQuoteStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("quotes");
   const parsed = SetStatusSchema.safeParse({
     id: formData.get("id"),
     status: formData.get("status"),
@@ -198,7 +198,7 @@ export async function deleteQuote(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("quotes");
   const parsed = DeleteSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return { error: firstError(parsed.error) };
 
@@ -225,7 +225,7 @@ export async function convertQuote(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("crm");
+  await requireEdit("quotes");
   const parsed = ConvertSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) return { error: firstError(parsed.error) };
   const { id } = parsed.data;

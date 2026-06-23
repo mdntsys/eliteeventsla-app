@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { listContactOptions, listCompanyOptions } from "@/lib/crm/queries";
 import { listQuotes } from "@/lib/quotes/queries";
 import { formatMoney, formatDate } from "@/lib/accounting/format";
@@ -11,7 +11,7 @@ import { QuoteForm } from "@/components/quotes/quote-form";
 export const metadata: Metadata = { title: "Quotes" };
 
 export default async function QuotesPage() {
-  await requireModule("crm");
+  await requireView("quotes");
 
   const [rows, contacts, companies] = await Promise.all([
     listQuotes(),

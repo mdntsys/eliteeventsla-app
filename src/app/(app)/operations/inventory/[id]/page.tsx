@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { getInventoryItem } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
 import { PageHeader } from "@/components/ui/page-header";
@@ -54,7 +54,7 @@ export default async function InventoryItemPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("operations");
+  await requireView("inventory");
   const { id } = await params;
   const [item, locationOptions] = await Promise.all([
     getInventoryItem(id),

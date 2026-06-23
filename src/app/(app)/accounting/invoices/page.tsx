@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import {
   listInvoices,
   listEventOptions,
@@ -24,7 +24,7 @@ function client(row: InvoiceListRow): string {
 }
 
 export default async function InvoicesPage() {
-  await requireModule("accounting");
+  await requireView("accounting");
 
   const [rows, events, contacts, companies] = await Promise.all([
     listInvoices(),

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listLocationsWithRows } from "@/lib/locations/queries";
 import { LocationsManager } from "@/components/inventory/locations-manager";
@@ -8,7 +8,7 @@ import { LocationsManager } from "@/components/inventory/locations-manager";
 export const metadata: Metadata = { title: "Locations" };
 
 export default async function LocationsPage() {
-  await requireModule("operations");
+  await requireView("inventory");
 
   const locations = await listLocationsWithRows();
 

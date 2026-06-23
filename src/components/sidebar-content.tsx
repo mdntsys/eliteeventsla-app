@@ -3,23 +3,52 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_SECTIONS } from "@/components/nav-config";
-import { canAccess, ROLE_LABELS, type AppRole } from "@/lib/auth/roles";
+import {
+  canView,
+  ROLE_LABELS,
+  type AppRole,
+  type PermissionMap,
+} from "@/lib/auth/roles";
+
+export type SidebarAccess = {
+  role: AppRole | null;
+  is_super_admin: boolean;
+  permissions: PermissionMap;
+};
 
 export function SidebarContent({
-  role,
+  access,
   name,
   email,
   onNavigate,
 }: {
-  role: AppRole;
+  access: SidebarAccess;
   name: string | null;
   email: string | null;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const sections = NAV_SECTIONS.filter((section) =>
-    canAccess(role, section.module),
-  );
+
+  // Build sections, filtering items by per-area view access. Super-admin-only
+  // sections (Team) are shown only to super admins. Drop any section that ends
+  // up with no visible items.
+  const sections = NAV_SECTIONS.map((section) => {
+    if (section.superAdminOnly && !access.is_super_admin) {
+      return { ...section, items: [] };
+    }
+    return {
+      ...section,
+      items: section.superAdminOnly
+        ? section.items
+        : section.items.filter((item) => canView(access, item.area)),
+    };
+  }).filter((section) => section.items.length > 0);
+
+  const roleLabel = access.is_super_admin
+    ? "Super Admin"
+    : access.role
+      ? ROLE_LABELS[access.role]
+      : "Pending access";
 
   return (
     <>
@@ -64,7 +93,7 @@ export function SidebarContent({
         <p className="truncate text-sm font-medium text-ink">
           {name || email || "Team member"}
         </p>
-        <p className="text-xs text-muted">{ROLE_LABELS[role]}</p>
+        <p className="text-xs text-muted">{roleLabel}</p>
         <form action="/auth/signout" method="post" className="mt-3">
           <button
             type="submit"

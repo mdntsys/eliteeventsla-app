@@ -1,0 +1,106 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { inviteUser, type ActionState } from "@/lib/admin/actions";
+import { APP_ROLES, ROLE_LABELS } from "@/lib/auth/roles";
+
+/**
+ * Toggleable inline form to invite a new user by email. Bound to inviteUser via
+ * useActionState; closes on success. Matches the deal/vendor form pattern.
+ */
+
+const FIELD =
+  "rounded-(--radius-card) border border-line bg-cream px-3.5 py-2.5 text-ink outline-none transition focus:border-navy";
+
+export function InviteForm() {
+  const [open, setOpen] = useState(false);
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    inviteUser,
+    undefined,
+  );
+
+  // Close the form after a successful invite.
+  if (state?.success && open) {
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90"
+      >
+        Invite user
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-(--radius-card) border border-line bg-card p-6">
+      <p className="eyebrow mb-3">Invite user</p>
+      <form action={action} className="grid gap-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            placeholder="name@example.com"
+            className={FIELD}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Full name</span>
+          <input
+            name="fullName"
+            type="text"
+            placeholder="Optional"
+            className={FIELD}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Role</span>
+          <select name="role" defaultValue="" className={FIELD}>
+            <option value="">No role (pending)</option>
+            {APP_ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {state?.error && (
+          <p role="alert" className="text-sm text-red-700 sm:col-span-3">
+            {state.error}
+          </p>
+        )}
+
+        <div className="mt-1 flex items-center gap-3 sm:col-span-3">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-(--radius-card) bg-navy px-4 py-2.5 text-sm font-medium text-cream transition hover:opacity-90 disabled:opacity-60"
+          >
+            {pending ? "Sending…" : "Send invite"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            disabled={pending}
+            className="text-sm text-muted transition hover:text-ink disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+      <p className="mt-3 text-xs text-muted">
+        Sends a Supabase invite email. The user lands with no role until you
+        grant one. Requires SUPABASE_SERVICE_ROLE_KEY to be configured.
+      </p>
+    </div>
+  );
+}

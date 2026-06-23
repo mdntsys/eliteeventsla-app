@@ -5,12 +5,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import Papa from "papaparse";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/inventory/types";
 
 /**
  * Server actions for the inventory module. Every action gates on
- * requireModule("operations") (defense in depth alongside RLS), validates with
+ * requireEdit("inventory") (defense in depth alongside RLS), validates with
  * zod v4, mutates via the typed server client, revalidates affected paths, and
  * returns an ActionState (or redirects).
  */
@@ -138,7 +138,7 @@ export async function createInventoryItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = CreateItemSchema.safeParse({
     name: formData.get("name"),
@@ -198,7 +198,7 @@ export async function addInventoryUnit(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = AddUnitSchema.safeParse({
     item_id: formData.get("item_id"),
@@ -241,7 +241,7 @@ export async function updateItemStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = UpdateItemStatusSchema.safeParse({
     item_id: formData.get("item_id"),
@@ -272,7 +272,7 @@ export async function logMaintenance(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = LogMaintenanceSchema.safeParse({
     item_id: formData.get("item_id"),
@@ -311,7 +311,7 @@ export async function resolveMaintenance(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = ResolveMaintenanceSchema.safeParse({
     id: formData.get("id"),
@@ -344,7 +344,7 @@ export async function setItemLocation(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = SetItemLocationSchema.safeParse({
     item_id: formData.get("item_id"),
@@ -381,7 +381,7 @@ export async function setUnitLocation(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = SetUnitLocationSchema.safeParse({
     unit_id: formData.get("unit_id"),
@@ -419,7 +419,7 @@ export async function setInventoryImage(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = SetInventoryImageSchema.safeParse({
     kind: formData.get("kind"),
@@ -476,7 +476,7 @@ export async function importInventoryCsv(
   _prev: ImportInventoryResult,
   formData: FormData,
 ): Promise<ImportInventoryResult> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const text = formData.get("csv");
   if (typeof text !== "string" || text.trim() === "") {

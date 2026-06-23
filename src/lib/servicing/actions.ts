@@ -4,12 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/servicing/types";
 
 /**
  * Server actions for the servicing module (client service tickets + comment
- * threads). Every action gates with requireModule("operations") — matching the
+ * threads). Every action gates with requireEdit("servicing") — matching the
  * RLS write policy — validates with zod v4, mutates via the typed server
  * client, revalidates affected paths, and returns an ActionState (or
  * redirects).
@@ -85,7 +85,7 @@ export async function createTicket(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("servicing");
 
   const parsed = CreateTicketSchema.safeParse({
     subject: formData.get("subject"),
@@ -141,7 +141,7 @@ export async function updateTicket(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("servicing");
 
   const parsed = UpdateTicketSchema.safeParse({
     id: formData.get("id"),
@@ -188,7 +188,7 @@ export async function addTicketComment(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("servicing");
 
   const parsed = AddCommentSchema.safeParse({
     ticket_id: formData.get("ticket_id"),

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/events/types";
 import {
   notifyBookingConfirmed,
@@ -14,8 +14,10 @@ import {
 
 /**
  * Server actions for the event/job lifecycle. Every action gates with
- * requireModule (events for the job record, operations for logistics — matching
- * RLS), validates with zod v4, mutates via the typed server client, revalidates
+ * requireEdit on its finer area: events for the job record (create/status/actual
+ * times), inventory for event_items (reserve/checkout/return), scheduling for
+ * schedule entries + crew assignment — matching the (forthcoming) RLS policy.
+ * Validates with zod v4, mutates via the typed server client, revalidates
  * affected paths, and returns an ActionState (or redirects). Postgres
  * exclusion (23P01) and unique (23505) violations are surfaced as friendly
  * messages rather than raw errors.
@@ -229,7 +231,7 @@ export async function createEvent(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("events");
+  await requireEdit("events");
 
   const parsed = CreateEventSchema.safeParse({
     title: formData.get("title"),
@@ -277,7 +279,7 @@ export async function setEventStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("events");
+  await requireEdit("events");
 
   const parsed = SetStatusSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -335,7 +337,7 @@ export async function reserveItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = ReserveItemSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -380,7 +382,7 @@ export async function removeEventItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = RemoveItemSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) {
@@ -410,7 +412,7 @@ export async function addScheduleEntry(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("scheduling");
 
   const parsed = AddScheduleSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -449,7 +451,7 @@ export async function updateScheduleStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("scheduling");
 
   const parsed = UpdateScheduleStatusSchema.safeParse({
     id: formData.get("id"),
@@ -484,7 +486,7 @@ export async function assignStaff(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("scheduling");
 
   const parsed = AssignStaffSchema.safeParse({
     schedule_entry_id: formData.get("schedule_entry_id"),
@@ -550,7 +552,7 @@ export async function unassignStaff(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("scheduling");
 
   const parsed = UnassignStaffSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) {
@@ -588,7 +590,7 @@ export async function checkOutItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = CheckOutSchema.safeParse({ id: formData.get("id") });
   if (!parsed.success) {
@@ -642,7 +644,7 @@ export async function checkInItem(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = CheckInSchema.safeParse({
     id: formData.get("id"),
@@ -736,7 +738,7 @@ export async function uploadReturnProof(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = UploadProofSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -800,7 +802,7 @@ export async function checkOutAllItems(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("inventory");
 
   const parsed = CheckOutAllSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -879,7 +881,7 @@ export async function setActualEventTimes(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("events");
 
   const parsed = SetActualTimesSchema.safeParse({
     event_id: formData.get("event_id"),

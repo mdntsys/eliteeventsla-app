@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { getTicket } from "@/lib/servicing/queries";
 import { listStaff } from "@/lib/events/queries";
 import { PageHeader } from "@/components/ui/page-header";
@@ -55,7 +55,7 @@ export default async function TicketDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("operations");
+  await requireView("servicing");
   const { id } = await params;
 
   const [ticket, staff] = await Promise.all([getTicket(id), listStaff()]);

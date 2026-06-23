@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { accountingOverview } from "@/lib/accounting/queries";
 import { formatMoney, formatDateTime } from "@/lib/accounting/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -40,7 +40,7 @@ function StatCard({
 }
 
 export default async function AccountingOverviewPage() {
-  await requireModule("accounting");
+  await requireView("accounting");
   const overview = await accountingOverview();
 
   return (

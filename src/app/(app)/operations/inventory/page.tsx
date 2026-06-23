@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listInventory, listCategories } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
@@ -12,7 +12,7 @@ import { CsvExport } from "@/components/inventory/csv-export";
 export const metadata: Metadata = { title: "Inventory" };
 
 export default async function InventoryPage() {
-  await requireModule("operations");
+  await requireView("inventory");
 
   const [rows, categories, locationOptions] = await Promise.all([
     listInventory(),

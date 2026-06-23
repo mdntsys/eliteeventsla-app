@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import {
   listTickets,
   listTicketFormOptions,
@@ -97,7 +97,7 @@ export default async function ServicingPage({
     category?: string;
   }>;
 }) {
-  await requireModule("operations");
+  await requireView("servicing");
   const sp = await searchParams;
 
   const filter: TicketFilter = {

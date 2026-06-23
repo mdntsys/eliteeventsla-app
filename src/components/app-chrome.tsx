@@ -2,16 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { SidebarContent } from "@/components/sidebar-content";
-import type { AppRole } from "@/lib/auth/roles";
+import { SidebarContent, type SidebarAccess } from "@/components/sidebar-content";
 
 export function AppChrome({
-  role,
+  access,
   name,
   email,
   children,
 }: {
-  role: AppRole;
+  access: SidebarAccess;
   name: string | null;
   email: string | null;
   children: React.ReactNode;
@@ -44,7 +43,7 @@ export function AppChrome({
     <div className="flex h-svh flex-col overflow-hidden lg:flex-row print:block print:h-auto print:overflow-visible">
       {/* Desktop: static left sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-card lg:flex print:lg:hidden">
-        <SidebarContent role={role} name={name} email={email} />
+        <SidebarContent access={access} name={name} email={email} />
       </aside>
 
       {/* Mobile: sticky top bar */}
@@ -127,7 +126,7 @@ export function AppChrome({
             </svg>
           </button>
           <SidebarContent
-            role={role}
+            access={access}
             name={name}
             email={email}
             onNavigate={closeDrawer}

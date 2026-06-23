@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listVendors, listVendorCategories } from "@/lib/vendors/queries";
 import { NewVendorForm } from "@/components/vendors/new-vendor-form";
@@ -13,7 +13,7 @@ export default async function VendorsPage({
 }: {
   searchParams: Promise<{ category?: string }>;
 }) {
-  await requireModule("operations");
+  await requireView("vendors");
 
   const sp = await searchParams;
   const categoryId = sp.category || undefined;

@@ -4,13 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import { getStripe } from "@/lib/stripe";
 import type { ActionState } from "@/lib/accounting/types";
 
 /**
  * Server actions for the accounting module. Every action gates on
- * requireModule("accounting") (defense in depth alongside RLS), validates with
+ * requireEdit("accounting") (defense in depth alongside RLS), validates with
  * zod, mutates via the typed server client, revalidates affected paths, and
  * returns an ActionState (or redirects). Stripe is used only behind getStripe(),
  * which throws when STRIPE_SECRET_KEY is absent — callers degrade gracefully.
@@ -114,7 +114,7 @@ export async function createInvoice(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("accounting");
+  await requireEdit("accounting");
 
   const parsed = CreateInvoiceSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -215,7 +215,7 @@ export async function updateInvoiceStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("accounting");
+  await requireEdit("accounting");
 
   const parsed = UpdateInvoiceStatusSchema.safeParse({
     id: formData.get("id"),
@@ -295,7 +295,7 @@ export async function recordPayment(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("accounting");
+  await requireEdit("accounting");
 
   const parsed = RecordPaymentSchema.safeParse({
     invoice_id: formData.get("invoice_id"),
@@ -353,7 +353,7 @@ export async function createStripePaymentLink(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("accounting");
+  await requireEdit("accounting");
 
   const parsed = StripeLinkSchema.safeParse({
     invoice_id: formData.get("invoice_id"),

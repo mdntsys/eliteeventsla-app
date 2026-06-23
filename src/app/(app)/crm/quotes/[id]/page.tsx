@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { getQuote } from "@/lib/quotes/queries";
 import { formatMoney, formatDate } from "@/lib/accounting/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,7 +17,7 @@ export default async function QuoteDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("crm");
+  await requireView("quotes");
   const { id } = await params;
   const quote = await getQuote(id);
   if (!quote) notFound();

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { requireModule, getUser } from "@/lib/auth/dal";
+import { requireView, getUser } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listScheduleInRange } from "@/lib/events/queries";
 import { ScheduleAgenda } from "@/components/events/schedule-agenda";
@@ -38,7 +38,7 @@ export default async function SchedulingPage({
 }: {
   searchParams: Promise<{ view?: string | string[] }>;
 }) {
-  await requireModule("operations");
+  await requireView("scheduling");
 
   const { view: viewParam } = await searchParams;
   const view = parseView(viewParam);

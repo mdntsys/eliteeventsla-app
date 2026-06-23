@@ -71,8 +71,9 @@ export default async function AppLayout({
     );
   }
 
-  // Invited but not yet granted a role.
-  if (!profile.role) {
+  // Invited but not yet granted a role. Super admins bypass this — they manage
+  // people/permissions and don't need a business role to reach the Team console.
+  if (!profile.role && !profile.is_super_admin) {
     return (
       <AccountNotice
         eyebrow="Pending access"
@@ -85,7 +86,11 @@ export default async function AppLayout({
 
   return (
     <AppChrome
-      role={profile.role}
+      access={{
+        role: profile.role,
+        is_super_admin: profile.is_super_admin,
+        permissions: profile.permissions,
+      }}
       name={profile.full_name}
       email={profile.email}
     >

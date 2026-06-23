@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import {
   getDeal,
   listContactOptions,
@@ -64,7 +64,7 @@ export default async function DealDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("crm");
+  await requireView("crm");
   const { id } = await params;
 
   const [deal, contacts, companies, stages, staff] = await Promise.all([

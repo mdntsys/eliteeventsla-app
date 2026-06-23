@@ -4,13 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireModule } from "@/lib/auth/dal";
+import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/vendors/types";
 import { notifyVendorConfirmationRequest } from "@/lib/email/send";
 
 /**
  * Server actions for the vendors module. Every action gates on
- * requireModule("operations") (defense in depth alongside RLS), validates with
+ * requireEdit("vendors") (defense in depth alongside RLS), validates with
  * zod v4, mutates via the typed server client, revalidates affected paths, and
  * returns an ActionState (or redirects).
  */
@@ -134,7 +134,7 @@ export async function createVendor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("vendors");
 
   const parsed = CreateVendorSchema.safeParse({
     name: formData.get("name"),
@@ -189,7 +189,7 @@ export async function updateVendor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("vendors");
 
   const parsed = UpdateVendorSchema.safeParse({
     id: formData.get("id"),
@@ -243,7 +243,7 @@ export async function addEventVendor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("vendors");
 
   const parsed = AddEventVendorSchema.safeParse({
     event_id: formData.get("event_id"),
@@ -309,7 +309,7 @@ export async function updateEventVendorStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("vendors");
 
   const parsed = UpdateEventVendorStatusSchema.safeParse({
     id: formData.get("id"),
@@ -340,7 +340,7 @@ export async function removeEventVendor(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireModule("operations");
+  await requireEdit("vendors");
 
   const parsed = RemoveEventVendorSchema.safeParse({
     id: formData.get("id"),

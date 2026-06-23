@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
-import { canAccess } from "@/lib/auth/roles";
+import { requireView } from "@/lib/auth/dal";
+import { canView } from "@/lib/auth/roles";
 import {
   getEvent,
   listStaff,
@@ -122,9 +122,9 @@ export default async function EventDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const profile = await requireModule("events");
+  const profile = await requireView("events");
   const { id } = await params;
-  const canBill = canAccess(profile.role, "accounting");
+  const canBill = canView(profile, "accounting");
 
   const [ev, staff, inventory] = await Promise.all([
     getEvent(id),

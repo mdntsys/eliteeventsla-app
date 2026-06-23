@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import {
   listPipeline,
   listContactOptions,
@@ -13,7 +13,7 @@ import { DealForm } from "@/components/crm/deal-form";
 export const metadata: Metadata = { title: "Pipeline" };
 
 export default async function CrmPipelinePage() {
-  await requireModule("crm");
+  await requireView("crm");
 
   const [columns, contacts, companies, stages] = await Promise.all([
     listPipeline(),

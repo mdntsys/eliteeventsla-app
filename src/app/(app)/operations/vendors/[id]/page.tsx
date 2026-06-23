@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { getVendor, listVendorCategories } from "@/lib/vendors/queries";
 import type { VendorEventRow } from "@/lib/vendors/types";
 import { PageHeader } from "@/components/ui/page-header";
@@ -56,7 +56,7 @@ export default async function VendorDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("operations");
+  await requireView("vendors");
   const { id } = await params;
 
   const [vendor, categories] = await Promise.all([

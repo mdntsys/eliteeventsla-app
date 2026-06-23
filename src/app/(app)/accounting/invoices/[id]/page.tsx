@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireModule } from "@/lib/auth/dal";
+import { requireView } from "@/lib/auth/dal";
 import { getInvoice } from "@/lib/accounting/queries";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/accounting/format";
 import { PageHeader } from "@/components/ui/page-header";
@@ -22,7 +22,7 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireModule("accounting");
+  await requireView("accounting");
   const { id } = await params;
   const invoice = await getInvoice(id);
   if (!invoice) notFound();
