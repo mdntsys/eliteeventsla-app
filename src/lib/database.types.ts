@@ -1164,6 +1164,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean
+          is_super_admin: boolean
           phone: string | null
           role: Database["public"]["Enums"]["app_role"] | null
           updated_at: string
@@ -1175,6 +1176,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean
+          is_super_admin?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
@@ -1186,6 +1188,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean
+          is_super_admin?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["app_role"] | null
           updated_at?: string
@@ -1575,6 +1578,41 @@ export type Database = {
           },
         ]
       }
+      user_module_permissions: {
+        Row: {
+          can_edit: boolean
+          can_view: boolean
+          module: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          can_edit?: boolean
+          can_view?: boolean
+          module: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          can_edit?: boolean
+          can_view?: boolean
+          module?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_module_permissions_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_categories: {
         Row: {
           created_at: string
@@ -1708,6 +1746,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_super_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       activity_type: "call" | "email" | "meeting" | "note" | "task"
