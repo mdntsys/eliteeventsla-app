@@ -94,14 +94,23 @@ export function SidebarContent({
           {name || email || "Team member"}
         </p>
         <p className="text-xs text-muted">{roleLabel}</p>
-        <form action="/auth/signout" method="post" className="mt-3">
-          <button
-            type="submit"
-            className="w-full rounded-(--radius-card) border border-line px-3 py-1.5 text-sm text-muted transition hover:border-navy hover:text-navy"
+        <div className="mt-3 flex gap-2">
+          <Link
+            href="/account"
+            onClick={() => onNavigate?.()}
+            className="flex-1 rounded-(--radius-card) border border-line px-3 py-1.5 text-center text-sm text-muted transition hover:border-navy hover:text-navy"
           >
-            Sign out
-          </button>
-        </form>
+            Account
+          </Link>
+          <form action="/auth/signout" method="post" className="flex-1">
+            <button
+              type="submit"
+              className="w-full rounded-(--radius-card) border border-line px-3 py-1.5 text-sm text-muted transition hover:border-navy hover:text-navy"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
     </>
   );
