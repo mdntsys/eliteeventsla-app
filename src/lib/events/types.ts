@@ -68,12 +68,21 @@ export type AttachmentRow = EventAttachment & {
   signed_url: string | null;
 };
 
+/** Per-event payment rollup, for at-a-glance scanning in the events list. */
+export type EventPaymentState = "unbilled" | "unpaid" | "partial" | "paid";
+
 /** A row in the events list table. */
 export type EventListRow = EventRow & {
   client_name: string | null;
   company_name: string | null;
   item_count: number;
   next_schedule_at: string | null;
+  /** Sum of non-void invoice totals billed to this event. */
+  invoiced: number;
+  /** Sum of amount_paid across this event's non-void invoices. */
+  paid: number;
+  /** Derived payment standing for the badge. */
+  payment_state: EventPaymentState;
 };
 
 /** The full event detail used by the command-center hub page. */

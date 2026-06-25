@@ -538,8 +538,13 @@ export async function setDealStage(
 }
 
 /**
- * Convert a deal into a confirmed event, copying over its core fields, mark the
- * deal won, then redirect to the new event. The deal must exist (RLS-visible).
+ * Convert a deal into a DRAFT event, copying over its core fields (including the
+ * deal's estimated value as the event's contracted total), mark the deal won,
+ * then redirect to the new event. The event is born 'draft' on purpose: a
+ * client payment against its invoice is what activates it (draft → confirmed),
+ * so the same payment gate applies whether the event came from a deal, a quote,
+ * or was created by hand. Idempotent: re-converting a deal that already has an
+ * event just routes back to that event instead of spawning a duplicate.
  */
 export async function convertDealToEvent(
   _prev: ActionState,
@@ -559,13 +564,24 @@ export async function convertDealToEvent(
   const { data: deal, error: dealError } = await supabase
     .from("deals")
     .select(
-      "id, title, contact_id, company_id, event_type, expected_event_date, owner_id",
+      "id, title, contact_id, company_id, event_type, expected_event_date, estimated_value, owner_id",
     )
     .eq("id", deal_id)
     .maybeSingle();
 
   if (dealError) return { error: dealError.message };
   if (!deal) return { error: "That deal could not be found." };
+
+  // Idempotency: if this deal already became an event, go there.
+  const { data: existingEvent } = await supabase
+    .from("events")
+    .select("id")
+    .eq("deal_id", deal.id)
+    .limit(1)
+    .maybeSingle();
+  if (existingEvent?.id) {
+    redirect(`/events/${existingEvent.id}`);
+  }
 
   const { data: inserted, error: insertError } = await supabase
     .from("events")
@@ -575,7 +591,8 @@ export async function convertDealToEvent(
       company_id: deal.company_id,
       event_type: deal.event_type ?? "other",
       event_date: deal.expected_event_date,
-      status: "confirmed",
+      total_amount: deal.estimated_value ?? null,
+      status: "draft",
       deal_id: deal.id,
       owner_id: deal.owner_id ?? user?.id ?? null,
       created_by: user?.id ?? null,

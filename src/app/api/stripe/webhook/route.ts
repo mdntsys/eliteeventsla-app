@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { reconcileInvoiceAndActivateEvent } from "@/lib/accounting/reconcile";
 
 // Webhooks need the Node.js runtime and must never be statically optimized.
 export const runtime = "nodejs";
@@ -192,52 +193,17 @@ async function markPayments(
 }
 
 /**
- * Recompute amount_paid/status for each invoice from its succeeded payments.
- * Mirrors reconcileInvoice() in lib/accounting/actions.ts: never touches
- * draft/void invoices, moves to paid/partial otherwise.
+ * Recompute each touched invoice and activate its event on payment. Delegates to
+ * the shared reconcile helper (the single source of truth, also used by the
+ * manual payment action) so invoice status AND the draft→confirmed event
+ * activation stay identical across both write paths. The service-role client is
+ * already in scope here, so the event update bypasses RLS as intended.
  */
 async function reconcileInvoices(
   supabase: SupabaseClient,
   invoiceIds: string[],
 ): Promise<void> {
   for (const invoiceId of invoiceIds) {
-    const { data: invoice } = await supabase
-      .from("invoices")
-      .select("total_amount, status")
-      .eq("id", invoiceId)
-      .maybeSingle();
-    if (!invoice) continue;
-
-    const { data: pays } = await supabase
-      .from("payments")
-      .select("amount, status")
-      .eq("invoice_id", invoiceId);
-
-    const paid = round2(
-      (pays ?? [])
-        .filter((p: { status: string }) => p.status === "succeeded")
-        .reduce(
-          (sum: number, p: { amount: number | null }) => sum + (p.amount ?? 0),
-          0,
-        ),
-    );
-
-    const inv = invoice as { total_amount: number | null; status: string };
-    const total = inv.total_amount ?? 0;
-    let status = inv.status;
-    if (status !== "void" && status !== "draft") {
-      if (total > 0 && paid >= total) status = "paid";
-      else if (paid > 0) status = "partial";
-    }
-
-    await supabase
-      .from("invoices")
-      .update({ amount_paid: paid, status })
-      .eq("id", invoiceId);
+    await reconcileInvoiceAndActivateEvent(supabase, invoiceId);
   }
-}
-
-/** Round to cents to avoid float drift in stored money. */
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
 import { NewEventForm } from "@/components/events/new-event-form";
-import type { EventListRow } from "@/lib/events/types";
+import type { EventListRow, EventPaymentState } from "@/lib/events/types";
 
 export const metadata: Metadata = { title: "Events & Jobs" };
 
@@ -16,6 +16,30 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   personal: "Personal",
   other: "Other",
 };
+
+const PAYMENT_BADGE: Record<
+  EventPaymentState,
+  { label: string; cls: string }
+> = {
+  paid: { label: "Paid", cls: "border-green-700/30 bg-green-50 text-green-800" },
+  partial: {
+    label: "Deposit",
+    cls: "border-amber-600/30 bg-amber-50 text-amber-800",
+  },
+  unpaid: { label: "Unpaid", cls: "border-red-700/30 bg-red-50 text-red-800" },
+  unbilled: { label: "Unbilled", cls: "border-line bg-cream text-muted" },
+};
+
+function PaymentBadge({ row }: { row: EventListRow }) {
+  const badge = PAYMENT_BADGE[row.payment_state];
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${badge.cls}`}
+    >
+      {badge.label}
+    </span>
+  );
+}
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -108,6 +132,9 @@ export default async function EventsPage() {
                   <th className="px-4 py-3">
                     <span className="eyebrow">Status</span>
                   </th>
+                  <th className="px-4 py-3">
+                    <span className="eyebrow">Billing</span>
+                  </th>
                   <th className="px-4 py-3 text-right">
                     <span className="eyebrow">Items</span>
                   </th>
@@ -144,6 +171,9 @@ export default async function EventsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={row.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <PaymentBadge row={row} />
                     </td>
                     <td className="px-4 py-3 text-right text-ink tabular-nums">
                       {row.item_count}

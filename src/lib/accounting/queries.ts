@@ -148,13 +148,18 @@ export async function accountingOverview(): Promise<AccountingOverview> {
     const total = inv.total_amount ?? 0;
     const paid = inv.amount_paid ?? 0;
     const balance = Math.max(total - paid, 0);
-    paidTotal += paid;
 
     if (inv.status === "draft") {
       draftCount += 1;
       continue;
     }
-    if (inv.status === "void" || inv.status === "paid") continue;
+    if (inv.status === "void") continue;
+
+    // Collected = money on real (issued, non-void) invoices only — a voided or
+    // still-draft invoice's amount_paid must not inflate the headline figure.
+    paidTotal += paid;
+
+    if (inv.status === "paid") continue;
 
     // sent / partial / overdue still owe money.
     outstanding += balance;
@@ -168,7 +173,11 @@ export async function accountingOverview(): Promise<AccountingOverview> {
     }
   }
 
-  const recentPayments = (await listPayments()).slice(0, 6);
+  // Recent payments = real cash in: a pending/failed Stripe attempt shouldn't
+  // read as a payment on the overview. The full list lives on /accounting/payments.
+  const recentPayments = (await listPayments())
+    .filter((p) => p.status === "succeeded")
+    .slice(0, 6);
 
   return {
     outstanding,

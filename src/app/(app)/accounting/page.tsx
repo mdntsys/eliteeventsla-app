@@ -48,7 +48,7 @@ export default async function AccountingOverviewPage() {
       <PageHeader
         eyebrow="Accounting"
         title="Overview"
-        description="Money at a glance — outstanding balances, recent payments, and jobs awaiting reconciliation."
+        description="Money at a glance — outstanding balances, what you've collected, and recent payments."
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

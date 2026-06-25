@@ -29,10 +29,9 @@ const SCHEDULE_TYPE_LABELS: Record<string, string> = {
   teardown: "Teardown",
 };
 
+// Keys must match event_status (draft|confirmed|in_progress|completed|cancelled).
 const STATUS_LABELS: Record<string, string> = {
-  inquiry: "Inquiry",
-  quoted: "Quoted",
-  booked: "Booked",
+  draft: "Draft",
   confirmed: "Confirmed",
   in_progress: "In progress",
   completed: "Completed",

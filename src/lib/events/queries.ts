@@ -77,7 +77,7 @@ export async function listEvents(): Promise<EventListRow[]> {
 
   const eventIds = events.map((e) => e.id);
 
-  const [itemsRes, scheduleRes] = await Promise.all([
+  const [itemsRes, scheduleRes, invoicesRes] = await Promise.all([
     supabase
       .from("event_items")
       .select("id, event_id")
@@ -87,14 +87,30 @@ export async function listEvents(): Promise<EventListRow[]> {
       .select("event_id, scheduled_start")
       .in("event_id", eventIds)
       .not("scheduled_start", "is", null),
+    supabase
+      .from("invoices")
+      .select("event_id, total_amount, amount_paid, status")
+      .in("event_id", eventIds)
+      .neq("status", "void"),
   ]);
 
   if (itemsRes.error) throw new Error(itemsRes.error.message);
   if (scheduleRes.error) throw new Error(scheduleRes.error.message);
+  if (invoicesRes.error) throw new Error(invoicesRes.error.message);
 
   const itemCounts = new Map<string, number>();
   for (const row of itemsRes.data ?? []) {
     itemCounts.set(row.event_id, (itemCounts.get(row.event_id) ?? 0) + 1);
+  }
+
+  // Per-event billing rollup (non-void invoices), for the list's payment badge.
+  const billing = new Map<string, { invoiced: number; paid: number }>();
+  for (const row of invoicesRes.data ?? []) {
+    if (!row.event_id) continue;
+    const acc = billing.get(row.event_id) ?? { invoiced: 0, paid: 0 };
+    acc.invoiced += row.total_amount ?? 0;
+    acc.paid += row.amount_paid ?? 0;
+    billing.set(row.event_id, acc);
   }
 
   const nowISO = new Date().toISOString();
@@ -113,12 +129,24 @@ export async function listEvents(): Promise<EventListRow[]> {
       contacts: ContactName;
       companies: { id: string; name: string } | null;
     };
+    const bill = billing.get(event.id) ?? { invoiced: 0, paid: 0 };
+    const payment_state: EventListRow["payment_state"] =
+      bill.invoiced <= 0
+        ? "unbilled"
+        : bill.paid >= bill.invoiced
+          ? "paid"
+          : bill.paid > 0
+            ? "partial"
+            : "unpaid";
     return {
       ...rest,
       client_name: contactName(contacts),
       company_name: companies?.name ?? null,
       item_count: itemCounts.get(event.id) ?? 0,
       next_schedule_at: nextSchedule.get(event.id) ?? null,
+      invoiced: bill.invoiced,
+      paid: bill.paid,
+      payment_state,
     };
   });
 }

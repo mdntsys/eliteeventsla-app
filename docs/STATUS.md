@@ -20,7 +20,7 @@ Repo: `git@github.com:mdntsys/eliteeventsla-app.git`, branch `main`. Stack + con
 | **Operations · Scheduling** | `/operations/scheduling` | ✅ Cross-job agenda + crew self-service (Mine/All, en route / arrived + arrival photo / done, logs actual times). |
 | **Operations · Vendors** | `/operations/vendors` (+ `[id]`) | ✅ Directory/detail + per-event vendor panel. |
 | **Operations · Servicing** | `/operations/servicing` (+ `[id]`) | ✅ Ticket queue + detail w/ threaded comments + categories; per-event tickets panel. |
-| **Accounting** | `/accounting`, `/accounting/invoices` (+ `[id]`), `/accounting/payments` | ✅ Invoices (line items, statuses, balances) + payments (record + reconcile) + overview. Stripe payment-link behind a `getStripe()` guard (graceful "Connect Stripe" until key added). |
+| **Accounting** | `/accounting`, `/accounting/invoices` (+ `[id]`), `/accounting/payments` | ✅ Invoices (line items, statuses, balances) + payments (record + reconcile) + overview. **Stripe LIVE**: payment links (idempotent, auto-issue draft→sent) + signed webhook. Paying an invoice reconciles it **and activates the linked event (draft→confirmed, client emailed)**; refunds downgrade. Shared engine: `src/lib/accounting/reconcile.ts`. |
 | **Emails (Resend)** | _infra, no route_ | ✅ Branded templates + guarded send helper (no-ops without key) wired to booking-confirmed / vendor-request / crew-assignment / return-receipt. |
 | **Admin** | `/admin/team` | ✅ User + role management (admin only). |
 
@@ -31,10 +31,11 @@ on role via `current_app_role()` / `is_admin()` / `has_any_role()` (also enforce
 types in `src/lib/database.types.ts` (regenerate after any migration). Storage: `operations-proofs` (private,
 return proofs) + `inventory-photos` (public).
 
-## Blockers (need a human — secrets in gitignored `.env.local`)
-- **Stripe**: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` — payment-link creation + webhook end-to-end (test mode). Code is built behind a guard; live path blocked.
-- **Resend**: `RESEND_API_KEY` + a verified sender — transactional email *sending*. Templates + triggers built; sending is a no-op until set.
-- **Service role**: `SUPABASE_SERVICE_ROLE_KEY` — used only by the Stripe webhook (`src/lib/supabase/service.ts`).
+## Integrations — all live (secrets in gitignored `.env.local` + Vercel)
+- **Stripe** ✅ LIVE: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` set; webhook destination points at `app.eliteeventsla.com/api/stripe/webhook` (4 events: checkout.session.completed, payment_intent.succeeded, payment_intent.payment_failed, charge.refunded). End-to-end lifecycle verified (19/19 smoke).
+- **Resend** ✅ LIVE: `RESEND_API_KEY` + verified sender (`ops@eliteeventsla.com`). Transactional sends active.
+- **Service role** ✅: `SUPABASE_SERVICE_ROLE_KEY` set — used by the Stripe webhook and the payment/convert cascades (`src/lib/supabase/service.ts`).
+- Pending: roll the live Stripe key once (it was pasted in chat during setup); enable Supabase leaked-password protection.
 
 ## Demo data — do NOT modify
 A seeded demo job is kept pristine for CEO demos. Treat `AUTOPILOT.md`'s "Do not touch" list as authoritative

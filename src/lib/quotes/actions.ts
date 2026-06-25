@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/quotes/types";
 
@@ -216,10 +218,20 @@ export async function deleteQuote(
 const ConvertSchema = z.object({ id: z.uuid() });
 
 /**
- * Accept → realize: an accepted quote becomes an event + a draft invoice
+ * Accept → realize: an accepted quote becomes a DRAFT event + a SENT invoice
  * (line items copied), and the quote is marked converted with both links set.
- * Writes events + invoices, so in practice an admin runs it (same as the
- * deal→event convert). Idempotent guard: refuses an already-converted quote.
+ *
+ * The event is born 'draft' so the client's payment activates it (draft →
+ * confirmed), matching the deal→event path. The invoice is born 'sent' (not
+ * draft) because it's a realized bill that will carry a payment link — a draft
+ * invoice would be skipped by reconcile and never mark paid.
+ *
+ * The three table writes (events, invoices, quote) span areas, so a sales user
+ * with quotes-edit but not accounting-edit would otherwise fail the invoice
+ * insert mid-flow and orphan the event. After the requireEdit('quotes')
+ * authority check we perform the writes with the service-role client (when
+ * available) so the realization succeeds as a unit. Idempotent: refuses an
+ * already-converted quote.
  */
 export async function convertQuote(
   _prev: ActionState,
@@ -252,15 +264,25 @@ export async function convertQuote(
     .eq("quote_id", id);
   if (liErr) return { error: liErr.message };
 
-  // 1) Event
-  const { data: event, error: evErr } = await supabase
+  // Authorized via requireEdit('quotes'); realize across areas with elevated
+  // privilege so the event/invoice/quote writes succeed as a unit.
+  let db: SupabaseClient;
+  try {
+    db = createServiceClient();
+  } catch {
+    db = supabase;
+  }
+
+  // 1) Event (draft — payment activates it)
+  const { data: event, error: evErr } = await db
     .from("events")
     .insert({
       title: quote.title ?? "Event from quote",
       contact_id: quote.contact_id,
       company_id: quote.company_id,
       event_type: "other",
-      status: "confirmed",
+      status: "draft",
+      total_amount: quote.total_amount,
       deal_id: quote.deal_id,
       owner_id: user?.id ?? null,
       created_by: user?.id ?? null,
@@ -271,16 +293,16 @@ export async function convertQuote(
     return { error: evErr?.message ?? "Could not create the event." };
   }
 
-  // 2) Draft invoice from the quote totals
+  // 2) Sent invoice from the quote totals (a real bill, ready for a link)
   const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`;
-  const { data: invoice, error: invErr } = await supabase
+  const { data: invoice, error: invErr } = await db
     .from("invoices")
     .insert({
       event_id: event.id,
       contact_id: quote.contact_id,
       company_id: quote.company_id,
       invoice_number: invoiceNumber,
-      status: "draft",
+      status: "sent",
       subtotal: quote.subtotal,
       tax: quote.tax,
       total_amount: quote.total_amount,
@@ -294,14 +316,14 @@ export async function convertQuote(
   }
 
   if (lineItems && lineItems.length > 0) {
-    const { error: copyErr } = await supabase
+    const { error: copyErr } = await db
       .from("invoice_line_items")
       .insert(lineItems.map((it) => ({ ...it, invoice_id: invoice.id })));
     if (copyErr) return { error: copyErr.message };
   }
 
   // 3) Mark the quote converted + link both records
-  const { error: updErr } = await supabase
+  const { error: updErr } = await db
     .from("quotes")
     .update({
       status: "converted",

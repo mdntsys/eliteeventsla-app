@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import { getStripe } from "@/lib/stripe";
+import { reconcileInvoiceAndActivateEvent } from "@/lib/accounting/reconcile";
 import type { ActionState } from "@/lib/accounting/types";
 
 /**
@@ -252,43 +255,24 @@ const RecordPaymentSchema = z.object({
 });
 
 /**
- * Recompute an invoice's amount_paid from its succeeded payments and move its
- * status to paid/partial accordingly. Never downgrades a manually-set status
- * below what the money implies; leaves draft/void alone.
+ * Reconcile an invoice + activate its event after a payment, with elevated
+ * privilege. The invoice/event updates are a system consequence of a payment the
+ * caller was already authorized to record (requireEdit('accounting') + RLS on
+ * the payments insert), and an accounting-only user can lack events-edit RLS —
+ * so the cascade runs through the service-role client when available, falling
+ * back to the user's client when the service key is absent (local dev).
  */
-async function reconcileInvoice(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+async function cascadeReconcile(
+  authed: SupabaseClient,
   invoiceId: string,
 ): Promise<void> {
-  const { data: invoice } = await supabase
-    .from("invoices")
-    .select("total_amount, status")
-    .eq("id", invoiceId)
-    .maybeSingle();
-  if (!invoice) return;
-
-  const { data: pays } = await supabase
-    .from("payments")
-    .select("amount, status")
-    .eq("invoice_id", invoiceId);
-
-  const paid = round2(
-    (pays ?? [])
-      .filter((p) => p.status === "succeeded")
-      .reduce((sum, p) => sum + (p.amount ?? 0), 0),
-  );
-
-  const total = invoice.total_amount ?? 0;
-  let status = invoice.status;
-  if (invoice.status !== "void" && invoice.status !== "draft") {
-    if (total > 0 && paid >= total) status = "paid";
-    else if (paid > 0) status = "partial";
+  let cascade: SupabaseClient;
+  try {
+    cascade = createServiceClient();
+  } catch {
+    cascade = authed;
   }
-
-  await supabase
-    .from("invoices")
-    .update({ amount_paid: paid, status })
-    .eq("id", invoiceId);
+  await reconcileInvoiceAndActivateEvent(cascade, invoiceId);
 }
 
 export async function recordPayment(
@@ -334,7 +318,7 @@ export async function recordPayment(
   if (error) return { error: error.message };
 
   if (data.invoice_id) {
-    await reconcileInvoice(supabase, data.invoice_id);
+    await cascadeReconcile(supabase, data.invoice_id);
     revalidatePath(`/accounting/invoices/${data.invoice_id}`);
   }
   revalidatePath("/accounting/payments");
@@ -365,7 +349,7 @@ export async function createStripePaymentLink(
   const supabase = await createClient();
   const { data: invoice, error } = await supabase
     .from("invoices")
-    .select("id, invoice_number, total_amount")
+    .select("id, invoice_number, total_amount, status, event_id")
     .eq("id", parsed.data.invoice_id)
     .maybeSingle();
   if (error) return { error: error.message };
@@ -376,6 +360,30 @@ export async function createStripePaymentLink(
 
   try {
     const stripe = getStripe();
+
+    // Idempotency: if a pending Stripe link already exists for this invoice,
+    // reuse it rather than minting a duplicate price/link + pending payment row.
+    const { data: existing } = await supabase
+      .from("payments")
+      .select("stripe_payment_link_id")
+      .eq("invoice_id", invoice.id)
+      .eq("method", "stripe")
+      .eq("status", "pending")
+      .not("stripe_payment_link_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.stripe_payment_link_id) {
+      const link = await stripe.paymentLinks.retrieve(
+        existing.stripe_payment_link_id,
+      );
+      // A still-active link is reusable; if it was deactivated, fall through.
+      if (link.active && link.url) {
+        return { success: true, url: link.url };
+      }
+    }
+
     const price = await stripe.prices.create({
       currency: "usd",
       unit_amount: Math.round((invoice.total_amount ?? 0) * 100),
@@ -389,6 +397,9 @@ export async function createStripePaymentLink(
     const user = await getUser();
     await supabase.from("payments").insert({
       invoice_id: invoice.id,
+      // Link the payment to the event too, so payment→event is directly
+      // traversable without a join (the webhook still reconciles via invoice).
+      event_id: invoice.event_id ?? null,
       amount: round2(invoice.total_amount ?? 0),
       currency: "usd",
       method: "stripe",
@@ -397,6 +408,16 @@ export async function createStripePaymentLink(
       notes: "Stripe payment link",
       created_by: user?.id ?? null,
     });
+
+    // Issue the invoice: a draft invoice with a live payment link is no longer a
+    // draft. Without this, reconcile would skip it and a paid link would never
+    // mark the invoice paid or activate the event.
+    if (invoice.status === "draft") {
+      await supabase
+        .from("invoices")
+        .update({ status: "sent" })
+        .eq("id", invoice.id);
+    }
 
     revalidatePath(`/accounting/invoices/${invoice.id}`);
     return { success: true, url: link.url ?? undefined };
