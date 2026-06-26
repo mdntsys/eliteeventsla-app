@@ -48,7 +48,21 @@ export function InvoiceShareActions({
         </button>
       </form>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-3 gap-2">
+        <a
+          href={shareUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-(--radius-card) border border-line px-3 py-2 text-center text-sm font-medium text-navy transition hover:border-navy"
+        >
+          Preview
+        </a>
+        <a
+          href={pdfUrl}
+          className="rounded-(--radius-card) border border-line px-3 py-2 text-center text-sm font-medium text-navy transition hover:border-navy"
+        >
+          PDF
+        </a>
         <button
           type="button"
           onClick={copy}
@@ -56,13 +70,12 @@ export function InvoiceShareActions({
         >
           {copied ? "Copied ✓" : "Copy link"}
         </button>
-        <a
-          href={pdfUrl}
-          className="rounded-(--radius-card) border border-line px-3 py-2 text-center text-sm font-medium text-navy transition hover:border-navy"
-        >
-          Download PDF
-        </a>
       </div>
+
+      <p className="text-xs text-muted">
+        Preview opens exactly what the client sees. Sending emails them the link
+        + PDF and BCCs your team.
+      </p>
 
       <a
         href={shareUrl}

@@ -23,14 +23,32 @@ export type SendResult = { ok: boolean; skipped: boolean; error?: string };
 
 export type EmailAttachment = { filename: string; content: Buffer | string };
 
+/**
+ * Team BCC for client invoice emails, so the group has a copy in their inbox as
+ * proof an invoice went out. Defaults to sales@eliteeventsla.com; override with
+ * INVOICE_BCC (comma-separated), or set INVOICE_BCC="" to disable.
+ */
+export function getInvoiceBcc(): string[] {
+  const raw = process.env.INVOICE_BCC;
+  const value = raw === undefined ? "sales@eliteeventsla.com" : raw;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export async function sendEmail(params: {
   to: string | string[];
   subject: string;
   html: string;
   text: string;
   attachments?: EmailAttachment[];
+  bcc?: string | string[];
 }): Promise<SendResult> {
   const to = Array.isArray(params.to) ? params.to : [params.to];
+  const bcc = (
+    params.bcc ? (Array.isArray(params.bcc) ? params.bcc : [params.bcc]) : []
+  ).filter(Boolean);
   if (!process.env.RESEND_API_KEY) {
     console.info(
       `[email] skipped (no RESEND_API_KEY): "${params.subject}" -> ${to.join(", ")}`,
@@ -48,6 +66,7 @@ export async function sendEmail(params: {
       ...(params.attachments?.length
         ? { attachments: params.attachments }
         : {}),
+      ...(bcc.length ? { bcc } : {}),
     });
     if (error) {
       const message =
@@ -135,7 +154,8 @@ export async function notifyInvoice(
   attachments?: EmailAttachment[],
 ): Promise<SendResult> {
   if (!to) return { ok: false, skipped: true, error: "No recipient email." };
-  return sendEmail({ to, ...invoiceEmail(p), attachments });
+  // Always BCC the team so they have inbox proof the invoice was sent.
+  return sendEmail({ to, bcc: getInvoiceBcc(), ...invoiceEmail(p), attachments });
 }
 
 export async function notifyReturnReceipt(
