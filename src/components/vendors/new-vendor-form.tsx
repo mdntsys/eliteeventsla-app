@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createVendor } from "@/lib/vendors/actions";
+import { Modal } from "@/components/ui/modal";
 import type { ActionState } from "@/lib/vendors/types";
 import type { Database } from "@/lib/database.types";
 
@@ -24,8 +25,8 @@ export function NewVendorForm({ categories }: { categories: VendorCategory[] }) 
     undefined,
   );
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -33,28 +34,10 @@ export function NewVendorForm({ categories }: { categories: VendorCategory[] }) 
       >
         New vendor
       </button>
-    );
-  }
 
-  return (
-    <div className="rounded-(--radius-card) border border-line bg-card p-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <div>
-          <p className="eyebrow">New</p>
-          <h2 className="font-display mt-0.5 text-xl font-light text-navy">
-            Add vendor
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="rounded-(--radius-card) border border-line bg-cream px-3.5 py-2 text-sm text-muted transition hover:text-ink"
-        >
-          Cancel
-        </button>
-      </div>
-
-      <form action={action} className="grid gap-5 sm:grid-cols-2">
+      {open && (
+        <Modal title="New vendor" onClose={() => setOpen(false)}>
+          <form action={action} className="grid gap-5 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="eyebrow">Name</span>
           <input name="name" type="text" required className={FIELD} />
@@ -161,7 +144,9 @@ export function NewVendorForm({ categories }: { categories: VendorCategory[] }) 
             Cancel
           </button>
         </div>
-      </form>
-    </div>
+          </form>
+        </Modal>
+      )}
+    </>
   );
 }

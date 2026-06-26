@@ -9,6 +9,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import { getStripe } from "@/lib/stripe";
 import { reconcileInvoiceAndActivateEvent } from "@/lib/accounting/reconcile";
+import { notifyPaymentLink } from "@/lib/email/send";
 import type { ActionState } from "@/lib/accounting/types";
 
 /**
@@ -333,6 +334,115 @@ const StripeLinkSchema = z.object({
   invoice_id: z.uuid("An invoice is required."),
 });
 
+type InvoiceForLink = {
+  id: string;
+  invoice_number: string | null;
+  total_amount: number | null;
+  status: string;
+  event_id: string | null;
+};
+
+type EnsureLinkResult =
+  | { url: string }
+  | { error: string; stripeUnconfigured?: boolean };
+
+/**
+ * Ensure a Stripe payment link exists for an invoice and return its URL. Reuses
+ * a still-active pending link instead of minting duplicates, records the pending
+ * payment row on first creation, and issues a draft invoice (draft → sent) since
+ * a live link means it's no longer a draft. Shared by the "create link" button
+ * and the "email link" action so both behave identically.
+ */
+async function ensurePaymentLink(
+  supabase: SupabaseClient,
+  invoice: InvoiceForLink,
+): Promise<EnsureLinkResult> {
+  if ((invoice.total_amount ?? 0) <= 0) {
+    return { error: "Add line items before creating a payment link." };
+  }
+
+  try {
+    const stripe = getStripe();
+
+    // Idempotency: if a pending Stripe link already exists for this invoice,
+    // reuse it rather than minting a duplicate price/link + pending payment row.
+    const { data: existing } = await supabase
+      .from("payments")
+      .select("stripe_payment_link_id")
+      .eq("invoice_id", invoice.id)
+      .eq("method", "stripe")
+      .eq("status", "pending")
+      .not("stripe_payment_link_id", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let url: string | undefined;
+    if (existing?.stripe_payment_link_id) {
+      const link = await stripe.paymentLinks.retrieve(
+        existing.stripe_payment_link_id,
+      );
+      // A still-active link is reusable; if it was deactivated, fall through.
+      if (link.active && link.url) url = link.url;
+    }
+
+    if (!url) {
+      const price = await stripe.prices.create({
+        currency: "usd",
+        unit_amount: Math.round((invoice.total_amount ?? 0) * 100),
+        product_data: {
+          name: `Invoice ${invoice.invoice_number ?? invoice.id}`,
+        },
+      });
+      const link = await stripe.paymentLinks.create({
+        line_items: [{ price: price.id, quantity: 1 }],
+        metadata: { invoice_id: invoice.id },
+      });
+
+      const user = await getUser();
+      await supabase.from("payments").insert({
+        invoice_id: invoice.id,
+        // Link the payment to the event too, so payment→event is directly
+        // traversable without a join (the webhook still reconciles via invoice).
+        event_id: invoice.event_id ?? null,
+        amount: round2(invoice.total_amount ?? 0),
+        currency: "usd",
+        method: "stripe",
+        status: "pending",
+        stripe_payment_link_id: link.id,
+        notes: "Stripe payment link",
+        created_by: user?.id ?? null,
+      });
+
+      url = link.url ?? undefined;
+    }
+
+    if (!url) return { error: "Stripe did not return a link URL." };
+
+    // Issue the invoice: a draft invoice with a live payment link is no longer a
+    // draft. Without this, reconcile would skip it and a paid link would never
+    // mark the invoice paid or activate the event.
+    if (invoice.status === "draft") {
+      await supabase
+        .from("invoices")
+        .update({ status: "sent" })
+        .eq("id", invoice.id);
+    }
+
+    return { url };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Stripe error.";
+    if (message.includes("STRIPE_SECRET_KEY")) {
+      return {
+        stripeUnconfigured: true,
+        error:
+          "Stripe isn't connected yet. Add STRIPE_SECRET_KEY to enable payment links.",
+      };
+    }
+    return { error: message };
+  }
+}
+
 export async function createStripePaymentLink(
   _prev: ActionState,
   formData: FormData,
@@ -354,82 +464,109 @@ export async function createStripePaymentLink(
     .maybeSingle();
   if (error) return { error: error.message };
   if (!invoice) return { error: "Invoice not found." };
-  if ((invoice.total_amount ?? 0) <= 0) {
-    return { error: "Add line items before creating a payment link." };
+
+  const result = await ensurePaymentLink(supabase, invoice);
+  if ("error" in result) {
+    return result.stripeUnconfigured
+      ? { stripeUnconfigured: true, error: result.error }
+      : { error: result.error };
   }
 
-  try {
-    const stripe = getStripe();
+  revalidatePath(`/accounting/invoices/${invoice.id}`);
+  return { success: true, url: result.url };
+}
 
-    // Idempotency: if a pending Stripe link already exists for this invoice,
-    // reuse it rather than minting a duplicate price/link + pending payment row.
-    const { data: existing } = await supabase
-      .from("payments")
-      .select("stripe_payment_link_id")
-      .eq("invoice_id", invoice.id)
-      .eq("method", "stripe")
-      .eq("status", "pending")
-      .not("stripe_payment_link_id", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+/**
+ * Create (or reuse) the Stripe payment link for an invoice and EMAIL it to the
+ * client — to the linked contact's email, falling back to the company's. Returns
+ * an error (not a throw) when there's no email on file or email isn't
+ * configured, surfacing the link so the operator can still copy it.
+ */
+export async function emailStripePaymentLink(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("accounting");
 
-    if (existing?.stripe_payment_link_id) {
-      const link = await stripe.paymentLinks.retrieve(
-        existing.stripe_payment_link_id,
-      );
-      // A still-active link is reusable; if it was deactivated, fall through.
-      if (link.active && link.url) {
-        return { success: true, url: link.url };
-      }
-    }
+  const parsed = StripeLinkSchema.safeParse({
+    invoice_id: formData.get("invoice_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
 
-    const price = await stripe.prices.create({
-      currency: "usd",
-      unit_amount: Math.round((invoice.total_amount ?? 0) * 100),
-      product_data: { name: `Invoice ${invoice.invoice_number ?? invoice.id}` },
-    });
-    const link = await stripe.paymentLinks.create({
-      line_items: [{ price: price.id, quantity: 1 }],
-      metadata: { invoice_id: invoice.id },
-    });
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("invoices")
+    .select(
+      "id, invoice_number, total_amount, status, event_id, contacts(first_name, last_name, email), companies(name, email)",
+    )
+    .eq("id", parsed.data.invoice_id)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Invoice not found." };
 
-    const user = await getUser();
-    await supabase.from("payments").insert({
-      invoice_id: invoice.id,
-      // Link the payment to the event too, so payment→event is directly
-      // traversable without a join (the webhook still reconciles via invoice).
-      event_id: invoice.event_id ?? null,
-      amount: round2(invoice.total_amount ?? 0),
-      currency: "usd",
-      method: "stripe",
-      status: "pending",
-      stripe_payment_link_id: link.id,
-      notes: "Stripe payment link",
-      created_by: user?.id ?? null,
-    });
+  type InvoiceRow = InvoiceForLink & {
+    contacts: {
+      first_name: string;
+      last_name: string | null;
+      email: string | null;
+    } | null;
+    companies: { name: string | null; email: string | null } | null;
+  };
+  const invoice = data as unknown as InvoiceRow;
 
-    // Issue the invoice: a draft invoice with a live payment link is no longer a
-    // draft. Without this, reconcile would skip it and a paid link would never
-    // mark the invoice paid or activate the event.
-    if (invoice.status === "draft") {
-      await supabase
-        .from("invoices")
-        .update({ status: "sent" })
-        .eq("id", invoice.id);
-    }
+  const to = invoice.contacts?.email ?? invoice.companies?.email ?? null;
+  if (!to) {
+    return {
+      error:
+        "No email on file for this invoice's client. Add an email to the contact (or company) first.",
+    };
+  }
 
-    revalidatePath(`/accounting/invoices/${invoice.id}`);
-    return { success: true, url: link.url ?? undefined };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Stripe error.";
-    if (message.includes("STRIPE_SECRET_KEY")) {
+  const result = await ensurePaymentLink(supabase, {
+    id: invoice.id,
+    invoice_number: invoice.invoice_number,
+    total_amount: invoice.total_amount,
+    status: invoice.status,
+    event_id: invoice.event_id,
+  });
+  if ("error" in result) {
+    return result.stripeUnconfigured
+      ? { stripeUnconfigured: true, error: result.error }
+      : { error: result.error };
+  }
+
+  const recipientName =
+    [invoice.contacts?.first_name, invoice.contacts?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim() ||
+    invoice.companies?.name ||
+    null;
+  const amountText =
+    invoice.total_amount != null
+      ? `$${round2(invoice.total_amount).toFixed(2)}`
+      : null;
+
+  const send = await notifyPaymentLink(to, {
+    url: result.url,
+    invoiceNumber: invoice.invoice_number,
+    amountText,
+    recipientName,
+  });
+
+  if (!send.ok) {
+    if (send.skipped) {
       return {
-        stripeUnconfigured: true,
         error:
-          "Stripe isn't connected yet. Add STRIPE_SECRET_KEY to enable payment links.",
+          "Email isn't configured (RESEND_API_KEY missing), so nothing was sent. The link is ready to copy below.",
+        url: result.url,
       };
     }
-    return { error: message };
+    return { error: send.error ?? "Could not send the email." };
   }
+
+  revalidatePath(`/accounting/invoices/${invoice.id}`);
+  return { success: true, url: result.url, emailedTo: to };
 }

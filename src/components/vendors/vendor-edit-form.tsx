@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { updateVendor } from "@/lib/vendors/actions";
+import { Modal } from "@/components/ui/modal";
 import type { ActionState } from "@/lib/vendors/types";
 import type { Database } from "@/lib/database.types";
 
@@ -36,8 +37,8 @@ export function VendorEditForm({
     setOpen(false);
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -45,13 +46,10 @@ export function VendorEditForm({
       >
         Edit
       </button>
-    );
-  }
 
-  return (
-    <div className="mt-6 border-t border-line pt-6">
-      <p className="eyebrow mb-4">Edit vendor</p>
-      <form action={action} className="grid gap-5 sm:grid-cols-2">
+      {open && (
+        <Modal title="Edit vendor" onClose={() => setOpen(false)}>
+          <form action={action} className="grid gap-5 sm:grid-cols-2">
         <input type="hidden" name="id" value={vendor.id} />
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
@@ -202,7 +200,9 @@ export function VendorEditForm({
             Cancel
           </button>
         </div>
-      </form>
-    </div>
+          </form>
+        </Modal>
+      )}
+    </>
   );
 }

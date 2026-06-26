@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createTicket } from "@/lib/servicing/actions";
+import { Modal } from "@/components/ui/modal";
 import type { ActionState } from "@/lib/servicing/types";
 import type { StaffMember } from "@/lib/events/types";
 
@@ -48,8 +49,8 @@ export function NewTicketForm({
   );
   const [open, setOpen] = useState(false);
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -57,16 +58,11 @@ export function NewTicketForm({
       >
         New ticket
       </button>
-    );
-  }
 
-  return (
-    <form
-      action={action}
-      className="rounded-(--radius-card) border border-line bg-card p-6"
-    >
-      <p className="eyebrow mb-3">New ticket</p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      {open && (
+        <Modal title="New ticket" onClose={() => setOpen(false)}>
+          <form action={action}>
+            <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1.5 sm:col-span-2">
           <span className="text-xs text-muted">Subject</span>
           <input
@@ -181,6 +177,9 @@ export function NewTicketForm({
           Cancel
         </button>
       </div>
-    </form>
+          </form>
+        </Modal>
+      )}
+    </>
   );
 }

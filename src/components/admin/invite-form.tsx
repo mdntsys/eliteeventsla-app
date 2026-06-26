@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { inviteUser, type ActionState } from "@/lib/admin/actions";
+import { Modal } from "@/components/ui/modal";
 import { APP_ROLES, ROLE_LABELS } from "@/lib/auth/roles";
 
 /**
@@ -28,8 +29,8 @@ export function InviteForm() {
     if (state?.success) formRef.current?.reset();
   }, [state]);
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -37,13 +38,10 @@ export function InviteForm() {
       >
         Invite user
       </button>
-    );
-  }
 
-  return (
-    <div className="rounded-(--radius-card) border border-line bg-card p-6">
-      <p className="eyebrow mb-3">Invite user</p>
-      <form ref={formRef} action={action} className="grid gap-3 sm:grid-cols-3">
+      {open && (
+        <Modal title="Invite user" onClose={() => setOpen(false)}>
+          <form ref={formRef} action={action} className="grid gap-3 sm:grid-cols-3">
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-muted">Email</span>
           <input
@@ -106,11 +104,13 @@ export function InviteForm() {
           </button>
         </div>
       </form>
-      <p className="mt-3 text-xs text-muted">
-        Creates the account and emails the person a branded welcome with a
-        temporary password and a sign-in link. They change it from Account →
-        Change password. Pick a role now or leave it pending.
-      </p>
-    </div>
+          <p className="mt-3 text-xs text-muted">
+            Creates the account and emails the person a branded welcome with a
+            temporary password and a sign-in link. They change it from Account →
+            Change password. Pick a role now or leave it pending.
+          </p>
+        </Modal>
+      )}
+    </>
   );
 }

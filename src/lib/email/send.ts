@@ -6,6 +6,7 @@ import {
   vendorConfirmationRequestEmail,
   crewAssignmentEmail,
   returnReceiptEmail,
+  paymentLinkEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -89,6 +90,25 @@ export async function notifyCrewAssignment(
   },
 ): Promise<void> {
   await fire(to, crewAssignmentEmail(p));
+}
+
+/**
+ * Email a client a Stripe payment link for their invoice. Unlike the other
+ * notify* helpers (fire-and-forget), this RETURNS the SendResult so the action
+ * can tell the operator whether it actually went out (or was skipped because
+ * email isn't configured).
+ */
+export async function notifyPaymentLink(
+  to: string | null | undefined,
+  p: {
+    url: string;
+    invoiceNumber?: string | null;
+    amountText?: string | null;
+    recipientName?: string | null;
+  },
+): Promise<SendResult> {
+  if (!to) return { ok: false, skipped: true, error: "No recipient email." };
+  return sendEmail({ to, ...paymentLinkEmail(p) });
 }
 
 export async function notifyReturnReceipt(

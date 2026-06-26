@@ -112,7 +112,8 @@ const companyFields = {
   state: optionalText,
   postal_code: optionalText,
   country: optionalText,
-  owner_id: optionalUuid,
+  // Ownership lives on contacts, not companies (individual clients have no
+  // company; deals carry their own sales owner). No owner_id here by design.
   notes: optionalText,
 };
 
@@ -296,7 +297,6 @@ export async function createCompany(
     state: formData.get("state"),
     postal_code: formData.get("postal_code"),
     country: formData.get("country"),
-    owner_id: formData.get("owner_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -319,7 +319,6 @@ export async function createCompany(
       state: data.state,
       postal_code: data.postal_code,
       country: data.country,
-      owner_id: data.owner_id,
       notes: data.notes,
       created_by: user?.id ?? null,
     })
@@ -354,7 +353,6 @@ export async function updateCompany(
     state: formData.get("state"),
     postal_code: formData.get("postal_code"),
     country: formData.get("country"),
-    owner_id: formData.get("owner_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -376,7 +374,6 @@ export async function updateCompany(
       state: data.state,
       postal_code: data.postal_code,
       country: data.country,
-      owner_id: data.owner_id,
       notes: data.notes,
       updated_at: new Date().toISOString(),
     })

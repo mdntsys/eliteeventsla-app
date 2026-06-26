@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type {
   AccountingOverview,
+  ContactOption,
   Invoice,
   InvoiceDetail,
   InvoiceLineItem,
@@ -214,6 +215,35 @@ export async function listContactOptions(): Promise<Option[]> {
   return (data ?? []).map((c) => ({
     id: c.id,
     label: [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || "Unnamed",
+  }));
+}
+
+/**
+ * Contacts with their linked company, so the invoice form can auto-derive the
+ * company once a contact is chosen (no separate, error-prone company picker).
+ */
+export async function listContactOptionsWithCompany(): Promise<ContactOption[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("id, first_name, last_name, company_id, companies(name)")
+    .order("first_name", { ascending: true });
+  if (error) throw new Error(error.message);
+
+  type Row = {
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    company_id: string | null;
+    companies: { name: string } | null;
+  };
+
+  return ((data ?? []) as unknown as Row[]).map((c) => ({
+    id: c.id,
+    label:
+      [c.first_name, c.last_name].filter(Boolean).join(" ").trim() || "Unnamed",
+    company_id: c.company_id ?? null,
+    company_name: c.companies?.name ?? null,
   }));
 }
 

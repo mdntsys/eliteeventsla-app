@@ -15,6 +15,15 @@ export type PaymentStatus = Enums["payment_status"];
 export type Option = { id: string; label: string };
 
 /**
+ * A contact option that also carries its company, so the invoice form can
+ * auto-derive the company from the chosen contact instead of asking again.
+ */
+export type ContactOption = Option & {
+  company_id: string | null;
+  company_name: string | null;
+};
+
+/**
  * The result shape returned by every accounting server action. `url` carries a
  * freshly-created Stripe payment link; `stripeUnconfigured` lets the UI render a
  * "Connect Stripe" state instead of an error when the secret key is absent.
@@ -25,6 +34,8 @@ export type ActionState =
       success?: boolean;
       url?: string;
       stripeUnconfigured?: boolean;
+      /** Recipient the payment link was emailed to (emailStripePaymentLink). */
+      emailedTo?: string;
     }
   | undefined;
 

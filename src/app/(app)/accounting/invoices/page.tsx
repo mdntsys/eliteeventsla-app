@@ -4,7 +4,7 @@ import { requireView } from "@/lib/auth/dal";
 import {
   listInvoices,
   listEventOptions,
-  listContactOptions,
+  listContactOptionsWithCompany,
   listCompanyOptions,
 } from "@/lib/accounting/queries";
 import { formatMoney, formatDate } from "@/lib/accounting/format";
@@ -29,7 +29,7 @@ export default async function InvoicesPage() {
   const [rows, events, contacts, companies] = await Promise.all([
     listInvoices(),
     listEventOptions(),
-    listContactOptions(),
+    listContactOptionsWithCompany(),
     listCompanyOptions(),
   ]);
 

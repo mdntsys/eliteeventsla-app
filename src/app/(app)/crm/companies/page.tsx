@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requireView } from "@/lib/auth/dal";
-import { listCompanies, listStaffOptions } from "@/lib/crm/queries";
+import { listCompanies } from "@/lib/crm/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { CompanyForm } from "@/components/crm/company-form";
 import { CompaniesList } from "@/components/crm/companies-list";
@@ -10,10 +10,7 @@ export const metadata: Metadata = { title: "Companies" };
 export default async function CompaniesPage() {
   await requireView("crm");
 
-  const [rows, staff] = await Promise.all([
-    listCompanies(),
-    listStaffOptions(),
-  ]);
+  const rows = await listCompanies();
 
   return (
     <>
@@ -21,7 +18,7 @@ export default async function CompaniesPage() {
         eyebrow="CRM"
         title="Companies"
         description="Organizations — corporate clients and accounts that group multiple contacts and deals."
-        action={<CompanyForm staff={staff} />}
+        action={<CompanyForm />}
       />
 
       <div className="flex flex-col gap-6">

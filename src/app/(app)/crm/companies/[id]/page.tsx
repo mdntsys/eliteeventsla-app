@@ -81,7 +81,7 @@ export default async function CompanyDetailPage({
         <section className="rounded-(--radius-card) border border-line bg-card p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <p className="eyebrow">Details</p>
-            <CompanyForm company={company} staff={staff} />
+            <CompanyForm company={company} />
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">

@@ -2,13 +2,14 @@
 
 import { useActionState, useState } from "react";
 import { createDeal, updateDeal } from "@/lib/crm/actions";
+import { Modal } from "@/components/ui/modal";
 import type { ActionState, Deal, Option } from "@/lib/crm/types";
 
 /**
- * Toggleable inline form to create or edit a deal. Bound to createDeal /
- * updateDeal via useActionState; createDeal redirects to the new deal on
- * success, updateDeal returns { success } and we close the form. Selects are
- * fed from the *Options queries. Matches the vendors / servicing form pattern.
+ * Toggleable form to create or edit a deal, opened in a centered Modal. Bound to
+ * createDeal / updateDeal via useActionState; createDeal redirects to the new
+ * deal on success, updateDeal returns { success } and we close the form. Selects
+ * are fed from the *Options queries. Matches the vendors / servicing form pattern.
  */
 
 const FIELD =
@@ -43,8 +44,8 @@ export function DealForm({
     setOpen(false);
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -56,13 +57,13 @@ export function DealForm({
       >
         {editing ? "Edit" : "New deal"}
       </button>
-    );
-  }
 
-  const body = (
-    <>
-      <p className="eyebrow mb-3">{editing ? "Edit deal" : "New deal"}</p>
-      <form action={action} className="grid gap-3 sm:grid-cols-2">
+      {open && (
+        <Modal
+          title={editing ? "Edit deal" : "New deal"}
+          onClose={() => setOpen(false)}
+        >
+          <form action={action} className="grid gap-3 sm:grid-cols-2">
         {editing && <input type="hidden" name="id" value={deal!.id} />}
 
         <label className="flex flex-col gap-1.5 sm:col-span-2">
@@ -211,18 +212,9 @@ export function DealForm({
             Cancel
           </button>
         </div>
-      </form>
+          </form>
+        </Modal>
+      )}
     </>
-  );
-
-  // When editing, render inline within a detail section divider; when creating,
-  // render as a standalone card (matches new-ticket-form).
-  if (editing) {
-    return <div className="mt-6 border-t border-line pt-6">{body}</div>;
-  }
-  return (
-    <div className="rounded-(--radius-card) border border-line bg-card p-6">
-      {body}
-    </div>
   );
 }

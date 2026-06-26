@@ -113,6 +113,32 @@ export function returnReceiptEmail(p: {
   return { subject: `Return receipt: ${p.eventTitle}`, html, text };
 }
 
+export function paymentLinkEmail(p: {
+  url: string;
+  invoiceNumber?: string | null;
+  amountText?: string | null;
+  recipientName?: string | null;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const ref = p.invoiceNumber ? ` (<strong>${p.invoiceNumber}</strong>)` : "";
+  const refText = p.invoiceNumber ? ` (${p.invoiceNumber})` : "";
+  const forAmount = p.amountText ? ` for <strong>${p.amountText}</strong>` : "";
+  const forAmountText = p.amountText ? ` for ${p.amountText}` : "";
+  const button = `<a href="${p.url}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;">Pay${p.amountText ? ` ${p.amountText}` : ""} securely →</a>`;
+  const html = layout("Your invoice from Elite Events LA", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Here's your invoice${ref}${forAmount}. You can pay securely online — by card — using the button below.</p>
+    <p style="margin:20px 0;">${button}</p>
+    <p ${META}>Or paste this link into your browser:<br><a href="${p.url}" style="color:${NAVY};word-break:break-all;">${p.url}</a></p>
+    <p ${P}>Thank you for choosing Elite Events LA.</p>`);
+  const text = `${hi}\n\nHere's your invoice${refText}${forAmountText}. Pay securely online:\n${p.url}\n\nThank you for choosing Elite Events LA.`;
+  return {
+    subject: `Your invoice from Elite Events LA${p.invoiceNumber ? ` — ${p.invoiceNumber}` : ""}`,
+    html,
+    text,
+  };
+}
+
 export function welcomeEmail(p: {
   fullName?: string | null;
   email: string;
