@@ -25,7 +25,7 @@ Repo: `git@github.com:mdntsys/eliteeventsla-app.git`, branch `main`. Stack + con
 | **Admin** | `/admin/team` | ✅ User + role management (admin only). |
 
 ## Data / schema
-Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0015`** applied (plain SQL in
+Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0021`** applied (plain SQL in
 `supabase/migrations/`, immutable once applied — add a new file to change schema). RLS on every table, keyed
 on role via `current_app_role()` / `is_admin()` / `has_any_role()` (also enforce `is_active`). Generated
 types in `src/lib/database.types.ts` (regenerate after any migration). Storage: `operations-proofs` (private,

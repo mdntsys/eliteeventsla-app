@@ -1,6 +1,5 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import {
   canEdit,
@@ -33,33 +32,65 @@ export type Profile = {
 
 const AREA_SET = new Set<string>(AREAS);
 
-export const getUser = cache(async (): Promise<User | null> => {
+/** The current user's verified identity (what callers actually use: the id). */
+export type AuthIdentity = { id: string; email: string | null };
+
+type VerifiedIdentity = { sub: string; email: string | null };
+
+/**
+ * Resolve the current user's verified identity. Fast path: verify the session
+ * JWT LOCALLY via getClaims() — the project signs with asymmetric ES256 keys, so
+ * this is a signature check against the cached public JWKS, zero network
+ * round-trips (vs. auth.getUser(), which calls the Auth server on every request).
+ * Safety net: if local verification is ever unavailable or inconclusive, fall
+ * back to the authoritative network getUser() so auth is never silently broken.
+ * The session is refreshed in proxy.ts, and RLS + the profile/is_active check
+ * remain the real authorization gate — so this is fast and secure. Wrapped in
+ * React cache() so one render pass verifies at most once.
+ */
+const getClaims = cache(async (): Promise<VerifiedIdentity | null> => {
   const supabase = await createClient();
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    const claims = data?.claims;
+    if (!error && claims?.sub) {
+      return {
+        sub: claims.sub,
+        email: typeof claims.email === "string" ? claims.email : null,
+      };
+    }
+  } catch {
+    // Fall through to the authoritative network check below.
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return user;
+  return user ? { sub: user.id, email: user.email ?? null } : null;
+});
+
+export const getUser = cache(async (): Promise<AuthIdentity | null> => {
+  const identity = await getClaims();
+  return identity ? { id: identity.sub, email: identity.email } : null;
 });
 
 export const getProfile = cache(async (): Promise<Profile | null> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const identity = await getClaims();
+  if (!identity) return null;
+  const userId = identity.sub;
 
+  const supabase = await createClient();
   const [{ data: profileRow }, { data: permRows }] = await Promise.all([
     supabase
       .from("profiles")
       .select(
         "id, email, full_name, role, phone, avatar_url, is_active, is_super_admin",
       )
-      .eq("id", user.id)
+      .eq("id", userId)
       .single(),
     supabase
       .from("user_module_permissions")
       .select("module, can_view, can_edit")
-      .eq("user_id", user.id),
+      .eq("user_id", userId),
   ]);
 
   if (!profileRow) return null;
@@ -89,7 +120,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
 });
 
 /** Require a signed-in user; otherwise bounce to /login. */
-export async function requireUser(): Promise<User> {
+export async function requireUser(): Promise<AuthIdentity> {
   const user = await getUser();
   if (!user) redirect("/login");
   return user;
