@@ -10,9 +10,10 @@ import {
   PaymentStatusBadge,
   methodLabel,
 } from "@/components/accounting/accounting-badges";
+import { headers } from "next/headers";
 import { InvoiceStatusControl } from "@/components/accounting/invoice-status-control";
 import { PaymentForm } from "@/components/accounting/payment-form";
-import { StripeLinkButton } from "@/components/accounting/stripe-link-button";
+import { InvoiceShareActions } from "@/components/accounting/invoice-share-actions";
 import { PrintInvoiceButton } from "@/components/accounting/print-invoice-button";
 
 export const metadata: Metadata = { title: "Invoice" };
@@ -26,6 +27,13 @@ export default async function InvoiceDetailPage({
   const { id } = await params;
   const invoice = await getInvoice(id);
   if (!invoice) notFound();
+
+  // Absolute base for the client-facing invoice link + PDF.
+  const h = await headers();
+  const host = h.get("host");
+  const origin = host ? `${h.get("x-forwarded-proto") ?? "https"}://${host}` : "";
+  const shareUrl = `${origin}/i/${invoice.public_token}`;
+  const pdfUrl = `${origin}/api/invoice/${invoice.public_token}/pdf`;
 
   const balance = Math.max(
     (invoice.total_amount ?? 0) - (invoice.amount_paid ?? 0),
@@ -255,8 +263,12 @@ export default async function InvoiceDetailPage({
           </div>
 
           <div className="rounded-(--radius-card) border border-line bg-card p-6 print:hidden">
-            <h2 className="eyebrow mb-3">Collect payment</h2>
-            <StripeLinkButton invoiceId={invoice.id} />
+            <h2 className="eyebrow mb-3">Send invoice</h2>
+            <InvoiceShareActions
+              invoiceId={invoice.id}
+              shareUrl={shareUrl}
+              pdfUrl={pdfUrl}
+            />
           </div>
         </div>
       </div>

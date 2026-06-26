@@ -7,6 +7,7 @@ import {
   crewAssignmentEmail,
   returnReceiptEmail,
   paymentLinkEmail,
+  invoiceEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -20,11 +21,14 @@ import {
 
 export type SendResult = { ok: boolean; skipped: boolean; error?: string };
 
+export type EmailAttachment = { filename: string; content: Buffer | string };
+
 export async function sendEmail(params: {
   to: string | string[];
   subject: string;
   html: string;
   text: string;
+  attachments?: EmailAttachment[];
 }): Promise<SendResult> {
   const to = Array.isArray(params.to) ? params.to : [params.to];
   if (!process.env.RESEND_API_KEY) {
@@ -41,6 +45,9 @@ export async function sendEmail(params: {
       subject: params.subject,
       html: params.html,
       text: params.text,
+      ...(params.attachments?.length
+        ? { attachments: params.attachments }
+        : {}),
     });
     if (error) {
       const message =
@@ -109,6 +116,26 @@ export async function notifyPaymentLink(
 ): Promise<SendResult> {
   if (!to) return { ok: false, skipped: true, error: "No recipient email." };
   return sendEmail({ to, ...paymentLinkEmail(p) });
+}
+
+/**
+ * Email a client their itemized invoice — a link to the public invoice page
+ * plus the PDF as an attachment. Returns the SendResult so the action can tell
+ * the operator whether it went out (or was skipped because email isn't set up).
+ */
+export async function notifyInvoice(
+  to: string | null | undefined,
+  p: {
+    url: string;
+    invoiceNumber?: string | null;
+    amountText?: string | null;
+    dueDateText?: string | null;
+    recipientName?: string | null;
+  },
+  attachments?: EmailAttachment[],
+): Promise<SendResult> {
+  if (!to) return { ok: false, skipped: true, error: "No recipient email." };
+  return sendEmail({ to, ...invoiceEmail(p), attachments });
 }
 
 export async function notifyReturnReceipt(

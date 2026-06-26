@@ -870,6 +870,7 @@ export type Database = {
           invoice_number: string | null
           issued_date: string | null
           notes: string | null
+          public_token: string
           status: Database["public"]["Enums"]["invoice_status"]
           subtotal: number
           tax: number
@@ -888,6 +889,7 @@ export type Database = {
           invoice_number?: string | null
           issued_date?: string | null
           notes?: string | null
+          public_token?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
           tax?: number
@@ -906,6 +908,7 @@ export type Database = {
           invoice_number?: string | null
           issued_date?: string | null
           notes?: string | null
+          public_token?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
           tax?: number

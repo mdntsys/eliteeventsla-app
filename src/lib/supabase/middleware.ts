@@ -39,8 +39,11 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isLogin = pathname === "/login";
-  // Public surfaces that must work without a session.
-  const isPublic = isLogin || pathname.startsWith("/auth");
+  // Public surfaces that must work without a session: login, auth callbacks, and
+  // the token-gated client invoice pages (/i/<token>). The invoice API routes
+  // (/api/invoice/...) are already outside the proxy matcher.
+  const isPublic =
+    isLogin || pathname.startsWith("/auth") || pathname.startsWith("/i/");
 
   // Not signed in → push to /login (remember where they were headed).
   if (!user && !isPublic) {

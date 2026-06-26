@@ -20,12 +20,12 @@ Repo: `git@github.com:mdntsys/eliteeventsla-app.git`, branch `main`. Stack + con
 | **Operations · Scheduling** | `/operations/scheduling` | ✅ Cross-job agenda + crew self-service (Mine/All, en route / arrived + arrival photo / done, logs actual times). |
 | **Operations · Vendors** | `/operations/vendors` (+ `[id]`) | ✅ Directory/detail + per-event vendor panel. |
 | **Operations · Servicing** | `/operations/servicing` (+ `[id]`) | ✅ Ticket queue + detail w/ threaded comments + categories; per-event tickets panel. |
-| **Accounting** | `/accounting`, `/accounting/invoices` (+ `[id]`), `/accounting/payments` | ✅ Invoices (line items, statuses, balances) + payments (record + reconcile) + overview. **Stripe LIVE**: payment links (idempotent, auto-issue draft→sent; **create-to-copy _or_ email the link straight to the client** via Resend) + signed webhook. Paying an invoice reconciles it **and activates the linked event (draft→confirmed, client emailed)**; refunds downgrade. Shared engines: `src/lib/accounting/reconcile.ts`, `ensurePaymentLink` in `actions.ts`. Invoice form auto-derives company from the chosen contact. |
+| **Accounting** | `/accounting`, `/accounting/invoices` (+ `[id]`), `/accounting/payments`; client-facing `/i/[token]` (+ `/api/invoice/[token]/{pdf,checkout}`) | ✅ Invoices (line items, statuses, balances) + payments (record + reconcile) + overview. **Client invoice delivery**: every invoice has an unguessable `public_token` → a branded, itemized **public page `/i/<token>`** (no login) that pays by **Stripe Checkout** (card) or shows global **Zelle/wire/check** instructions, plus a generated **PDF** (`@react-pdf/renderer`). "Send invoice to client" emails the link + PDF via Resend. **Stripe LIVE**: signed webhook reconciles Checkout *and* legacy payment links (match by session/link id) → invoice paid **+ event activated (draft→confirmed)**; refunds downgrade. Shared: `reconcile.ts`, `src/lib/invoices/public.ts`, `src/lib/pdf/invoice-pdf.tsx`. |
 | **Emails (Resend)** | _infra, no route_ | ✅ Branded templates + guarded send helper (no-ops without key) wired to booking-confirmed / vendor-request / crew-assignment / return-receipt. |
 | **Admin** | `/admin/team` | ✅ User + role management (admin only). |
 
 ## Data / schema
-Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0021`** applied (plain SQL in
+Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0022`** applied (plain SQL in
 `supabase/migrations/`, immutable once applied — add a new file to change schema). RLS on every table, keyed
 on role via `current_app_role()` / `is_admin()` / `has_any_role()` (also enforce `is_active`). Generated
 types in `src/lib/database.types.ts` (regenerate after any migration). Storage: `operations-proofs` (private,

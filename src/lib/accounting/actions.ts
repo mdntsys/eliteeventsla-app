@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
@@ -9,7 +10,9 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import { getStripe } from "@/lib/stripe";
 import { reconcileInvoiceAndActivateEvent } from "@/lib/accounting/reconcile";
-import { notifyPaymentLink } from "@/lib/email/send";
+import { getInvoiceByToken } from "@/lib/invoices/public";
+import { formatDate } from "@/lib/accounting/format";
+import { notifyPaymentLink, notifyInvoice } from "@/lib/email/send";
 import type { ActionState } from "@/lib/accounting/types";
 
 /**
@@ -569,4 +572,131 @@ export async function emailStripePaymentLink(
 
   revalidatePath(`/accounting/invoices/${invoice.id}`);
   return { success: true, url: result.url, emailedTo: to };
+}
+
+/**
+ * Email the client their full ITEMIZED invoice: a branded email linking to the
+ * public invoice page (/i/<token>, where they pay by card or read the Zelle/wire
+ * details) with the invoice PDF attached. Marks a draft invoice sent. Recipient
+ * is the linked contact's email, falling back to the company's.
+ */
+export async function sendInvoiceToClient(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("accounting");
+
+  const parsed = StripeLinkSchema.safeParse({
+    invoice_id: formData.get("invoice_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  // Everything after the auth/validation gate runs inside a try so an
+  // unexpected throw (PDF render, headers, dynamic import) returns a clean
+  // ActionState instead of an uncaught server-action error. (requireEdit's
+  // redirect stays above this and propagates as intended.)
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("invoices")
+      .select(
+        "id, public_token, invoice_number, total_amount, status, due_date, contacts(first_name, last_name, email), companies(name, email)",
+      )
+      .eq("id", parsed.data.invoice_id)
+      .maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "Invoice not found." };
+
+    type Row = {
+      id: string;
+      public_token: string;
+      invoice_number: string | null;
+      total_amount: number | null;
+      status: string;
+      due_date: string | null;
+      contacts: {
+        first_name: string;
+        last_name: string | null;
+        email: string | null;
+      } | null;
+      companies: { name: string | null; email: string | null } | null;
+    };
+    const inv = data as unknown as Row;
+
+    const to = inv.contacts?.email ?? inv.companies?.email ?? null;
+    if (!to) {
+      return {
+        error:
+          "No email on file for this invoice's client. Add an email to the contact (or company) first.",
+      };
+    }
+
+    // Absolute origin from the current request (prod + preview).
+    const h = await headers();
+    const host = h.get("host");
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    if (!host) return { error: "Could not determine the site URL." };
+    const url = `${proto}://${host}/i/${inv.public_token}`;
+
+    // Render the PDF from the same loader the public page/PDF use. Dynamic
+    // import keeps @react-pdf/renderer out of any client bundle.
+    const publicInvoice = await getInvoiceByToken(inv.public_token);
+    if (!publicInvoice) return { error: "Could not load the invoice." };
+    const { renderInvoicePdf } = await import("@/lib/pdf/invoice-pdf");
+    const pdf = await renderInvoicePdf(publicInvoice);
+
+    const recipientName =
+      [inv.contacts?.first_name, inv.contacts?.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() ||
+      inv.companies?.name ||
+      null;
+    const amountText =
+      inv.total_amount != null
+        ? `$${round2(inv.total_amount).toFixed(2)}`
+        : null;
+    const dueDateText = inv.due_date ? formatDate(inv.due_date) : null;
+    const fileName = `Invoice-${inv.invoice_number ?? inv.id.slice(0, 8)}.pdf`;
+
+    const send = await notifyInvoice(
+      to,
+      {
+        url,
+        invoiceNumber: inv.invoice_number,
+        amountText,
+        dueDateText,
+        recipientName,
+      },
+      [{ filename: fileName, content: pdf }],
+    );
+
+    if (!send.ok) {
+      if (send.skipped) {
+        return {
+          error:
+            "Email isn't configured (RESEND_API_KEY missing), so nothing was sent. You can still copy the invoice link below.",
+          url,
+        };
+      }
+      return { error: send.error ?? "Could not send the invoice email." };
+    }
+
+    if (inv.status === "draft") {
+      await supabase
+        .from("invoices")
+        .update({ status: "sent" })
+        .eq("id", inv.id);
+    }
+
+    revalidatePath(`/accounting/invoices/${inv.id}`);
+    return { success: true, url, emailedTo: to };
+  } catch (e) {
+    const message =
+      e instanceof Error ? e.message : "Could not send the invoice.";
+    console.error("[invoice] send error:", message);
+    return { error: message };
+  }
 }

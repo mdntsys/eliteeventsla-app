@@ -139,6 +139,39 @@ export function paymentLinkEmail(p: {
   };
 }
 
+export function invoiceEmail(p: {
+  url: string;
+  invoiceNumber?: string | null;
+  amountText?: string | null;
+  dueDateText?: string | null;
+  recipientName?: string | null;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const ref = p.invoiceNumber ? ` <strong>${p.invoiceNumber}</strong>` : "";
+  const refText = p.invoiceNumber ? ` ${p.invoiceNumber}` : "";
+  const forAmount = p.amountText ? ` for <strong>${p.amountText}</strong>` : "";
+  const forAmountText = p.amountText ? ` for ${p.amountText}` : "";
+  const due =
+    p.dueDateText && p.dueDateText !== "—"
+      ? ` It's due <strong>${p.dueDateText}</strong>.`
+      : "";
+  const dueText =
+    p.dueDateText && p.dueDateText !== "—" ? ` Due ${p.dueDateText}.` : "";
+  const button = `<a href="${p.url}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;">View &amp; pay your invoice →</a>`;
+  const html = layout("Your invoice from Elite Events LA", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Your itemized invoice${ref}${forAmount} is ready.${due} Open it to review the line items and pay securely by card — or pay by Zelle, wire, or check using the details on the invoice. A PDF copy is attached for your records.</p>
+    <p style="margin:20px 0;">${button}</p>
+    <p ${META}>Or paste this link into your browser:<br><a href="${p.url}" style="color:${NAVY};word-break:break-all;">${p.url}</a></p>
+    <p ${P}>Thank you for choosing Elite Events LA.</p>`);
+  const text = `${hi}\n\nYour itemized invoice${refText}${forAmountText} is ready.${dueText}\n\nView & pay: ${p.url}\n\nYou can pay by card online, or by Zelle, wire, or check (details on the invoice). A PDF copy is attached.\n\nThank you for choosing Elite Events LA.`;
+  return {
+    subject: `Your invoice from Elite Events LA${p.invoiceNumber ? ` — ${p.invoiceNumber}` : ""}`,
+    html,
+    text,
+  };
+}
+
 export function welcomeEmail(p: {
   fullName?: string | null;
   email: string;
