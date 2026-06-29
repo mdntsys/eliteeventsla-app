@@ -11,6 +11,14 @@ import {
   notifyCrewAssignment,
   notifyReturnReceipt,
 } from "@/lib/email/send";
+import {
+  optionalDate,
+  optionalInt,
+  optionalMoney,
+  optionalTimestamp,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for the event/job lifecycle. Every action gates with
@@ -22,70 +30,6 @@ import {
  * exclusion (23P01) and unique (23505) violations are surfaced as friendly
  * messages rather than raw errors.
  */
-
-// --- Reusable field coercions -----------------------------------------------
-
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
-
-const optionalInt = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isInteger(n) && n >= 0;
-    },
-    { message: "Enter a valid whole number." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
-
-/** Empty string -> null; otherwise a valid ISO/datetime-local timestamp. */
-const optionalTimestamp = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => v === "" || !Number.isNaN(new Date(v).getTime()),
-    { message: "Enter a valid date/time." },
-  )
-  .transform((v) => (v === "" ? null : new Date(v).toISOString()));
-
-/** Empty string -> null; otherwise a date (YYYY-MM-DD passes through). */
-const optionalDate = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => v === "" || !Number.isNaN(new Date(v).getTime()),
-    { message: "Enter a valid date." },
-  )
-  .transform((v) => (v === "" ? null : v));
 
 // --- Enums ------------------------------------------------------------------
 

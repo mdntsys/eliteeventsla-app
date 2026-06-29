@@ -14,6 +14,13 @@ import { getInvoiceByToken } from "@/lib/invoices/public";
 import { formatDate } from "@/lib/accounting/format";
 import { notifyPaymentLink, notifyInvoice } from "@/lib/email/send";
 import type { ActionState } from "@/lib/accounting/types";
+import {
+  money,
+  optionalDate,
+  optionalMoneyZero as optionalMoney,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for the accounting module. Every action gates on
@@ -22,48 +29,6 @@ import type { ActionState } from "@/lib/accounting/types";
  * returns an ActionState (or redirects). Stripe is used only behind getStripe(),
  * which throws when STRIPE_SECRET_KEY is absent — callers degrade gracefully.
  */
-
-// --- Reusable coercions -----------------------------------------------------
-
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-const optionalDate = z
-  .string()
-  .transform((v) => v.trim())
-  .transform((v) => (v === "" ? null : v));
-
-/** Required, non-negative money amount. */
-const money = z.coerce
-  .number()
-  .refine((n) => Number.isFinite(n) && n >= 0, "Enter a valid amount.");
-
-/** Optional, non-negative money amount (empty -> 0). */
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? 0 : Number(v)));
 
 const invoiceStatusEnum = z.enum([
   "draft",

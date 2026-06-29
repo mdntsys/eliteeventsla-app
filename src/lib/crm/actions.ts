@@ -5,7 +5,15 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
-import type { ActionState } from "@/lib/crm/types";
+import {
+  optionalDate,
+  optionalDateTime,
+  optionalEmail,
+  optionalMoney,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
+import type { ActionState, Option } from "@/lib/crm/types";
 
 /**
  * Server actions for the CRM module (contacts, companies, deals, pipeline,
@@ -14,66 +22,9 @@ import type { ActionState } from "@/lib/crm/types";
  * revalidates affected paths, and returns an ActionState (or redirects).
  */
 
-// --- Reusable field coercions -----------------------------------------------
-
-/** Empty string -> null; otherwise trimmed string. */
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-/** Empty string -> null; otherwise a trimmed, validated email. */
-const optionalEmail = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.email().safeParse(v).success, {
-    message: "Enter a valid email.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-/** Empty string -> null uuid; otherwise a validated uuid. */
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-/** Empty string -> null number; otherwise a coerced non-negative number. */
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
-
-/** Empty string -> null; otherwise an ISO date (YYYY-MM-DD) passthrough. */
-const optionalDate = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-/** Empty string -> null; otherwise a datetime-local value as an ISO string. */
-const optionalDateTime = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || !Number.isNaN(Date.parse(v)), {
-    message: "Enter a valid date and time.",
-  })
-  .transform((v) => (v === "" ? null : new Date(v).toISOString()));
+// Field coercions (optionalText / optionalUuid / optionalMoney / …) are shared
+// across modules — see @/lib/forms/coercions. They normalize an absent field
+// (FormData.get → null) to empty, so omitting an optional input never crashes.
 
 // --- Enums ------------------------------------------------------------------
 
@@ -275,6 +226,73 @@ export async function updateContact(
   revalidatePath(`/crm/contacts/${id}`);
   revalidatePath("/crm/contacts");
   return { success: true };
+}
+
+/** Result of an inline contact create: the new option on success, else an error. */
+export type CreateContactInlineResult =
+  | { ok: true; contact: Option }
+  | { ok: false; error: string };
+
+const CreateContactInlineSchema = z.object({
+  first_name: z.string().trim().min(1, "A first name is required."),
+  last_name: optionalText,
+  email: optionalEmail,
+  phone: optionalText,
+  company_id: optionalUuid,
+});
+
+/**
+ * Create a contact and return it as a form Option — without redirecting. Powers
+ * the "add a contact without leaving the page" affordance in the New Deal modal
+ * (and any contact picker that wants inline creation). Mirrors createContact's
+ * RLS gate + insert, but stays put and hands the caller the new id/label so it
+ * can be selected immediately. Called with a plain object (not FormData) so it
+ * needs no nested <form>.
+ */
+export async function createContactInline(
+  input: unknown,
+): Promise<CreateContactInlineResult> {
+  await requireEdit("crm");
+
+  const parsed = CreateContactInlineSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const data = parsed.data;
+  const user = await getUser();
+  const supabase = await createClient();
+
+  const { data: inserted, error } = await supabase
+    .from("contacts")
+    .insert({
+      first_name: data.first_name,
+      last_name: data.last_name,
+      email: data.email,
+      phone: data.phone,
+      company_id: data.company_id,
+      created_by: user?.id ?? null,
+    })
+    .select("id, first_name, last_name")
+    .single();
+
+  if (error || !inserted) {
+    return {
+      ok: false,
+      error: error?.message ?? "Could not create the contact.",
+    };
+  }
+
+  // Surface the new contact wherever contacts are listed/selected.
+  revalidatePath("/crm/contacts");
+  revalidatePath("/crm");
+  revalidatePath("/crm/deals");
+
+  const label =
+    [inserted.first_name, inserted.last_name]
+      .filter((p) => p && p.trim() !== "")
+      .join(" ")
+      .trim() || "Unnamed contact";
+
+  return { ok: true, contact: { id: inserted.id, label } };
 }
 
 // --- Companies --------------------------------------------------------------

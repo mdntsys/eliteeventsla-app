@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/locations/types";
+import { optionalText } from "@/lib/forms/coercions";
 
 /**
  * Server actions for managing structured locations and warehouse rows. Every
@@ -14,15 +15,6 @@ import type { ActionState } from "@/lib/locations/types";
  */
 
 // --- Reusable field coercions -----------------------------------------------
-
-/** Empty string -> null; otherwise trimmed string. */
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
 
 const locationKindEnum = z.enum(["warehouse", "offsite"]);
 

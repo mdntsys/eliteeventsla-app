@@ -8,6 +8,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/quotes/types";
+import {
+  optionalDate,
+  optionalMoneyZero as optionalMoney,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for quotes. Gate on requireEdit("quotes") (quotes are their
@@ -15,40 +21,6 @@ import type { ActionState } from "@/lib/quotes/types";
  * convertQuote mirrors convertDealToEvent: it spins up an event + a draft
  * invoice from an accepted quote (admin has rights to all three tables).
  */
-
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-const optionalDate = z
-  .string()
-  .transform((v) => v.trim())
-  .transform((v) => (v === "" ? null : v));
-
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? 0 : Number(v)));
 
 const quoteStatusEnum = z.enum([
   "draft",

@@ -7,6 +7,11 @@ import Papa from "papaparse";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/inventory/types";
+import {
+  optionalMoney,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for the inventory module. Every action gates on
@@ -14,40 +19,6 @@ import type { ActionState } from "@/lib/inventory/types";
  * zod v4, mutates via the typed server client, revalidates affected paths, and
  * returns an ActionState (or redirects).
  */
-
-// --- Reusable field coercions -----------------------------------------------
-
-/** Empty string -> null; otherwise trimmed string. */
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-/** Empty string -> null uuid; otherwise a validated uuid. */
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-/** Empty string -> null number; otherwise a coerced non-negative number. */
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
 
 const itemStatusEnum = z.enum(["available", "maintenance", "retired"]);
 const unitStatusEnum = z.enum([

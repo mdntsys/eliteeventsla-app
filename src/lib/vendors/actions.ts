@@ -7,6 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/vendors/types";
 import { notifyVendorConfirmationRequest } from "@/lib/email/send";
+import {
+  checkbox,
+  optionalEmail,
+  optionalMoney,
+  optionalRating,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for the vendors module. Every action gates on
@@ -14,68 +22,6 @@ import { notifyVendorConfirmationRequest } from "@/lib/email/send";
  * zod v4, mutates via the typed server client, revalidates affected paths, and
  * returns an ActionState (or redirects).
  */
-
-// --- Reusable field coercions -----------------------------------------------
-
-/** Empty string -> null; otherwise trimmed string. */
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-/** Empty string -> null; otherwise a trimmed, validated email. */
-const optionalEmail = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.email().safeParse(v).success, {
-    message: "Enter a valid email.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-/** Empty string -> null uuid; otherwise a validated uuid. */
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
-
-/** Empty string -> null number; otherwise a coerced non-negative number. */
-const optionalMoney = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0;
-    },
-    { message: "Enter a valid amount." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
-
-/** Empty string -> null; otherwise a number in [0, 5]. */
-const optionalRating = z
-  .string()
-  .transform((v) => v.trim())
-  .refine(
-    (v) => {
-      if (v === "") return true;
-      const n = Number(v);
-      return Number.isFinite(n) && n >= 0 && n <= 5;
-    },
-    { message: "Rating must be between 0 and 5." },
-  )
-  .transform((v) => (v === "" ? null : Number(v)));
-
-/** HTML checkbox -> boolean ("on"/"true" => true). */
-const checkbox = z
-  .union([z.string(), z.null(), z.undefined()])
-  .transform((v) => v === "on" || v === "true");
 
 const vendorStatusEnum = z.enum(["active", "inactive"]);
 const eventVendorStatusEnum = z.enum(["proposed", "confirmed", "declined"]);

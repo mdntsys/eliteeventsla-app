@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createDeal, updateDeal } from "@/lib/crm/actions";
 import { Modal } from "@/components/ui/modal";
+import { ContactSelect } from "@/components/crm/contact-select";
 import type { ActionState, Deal, Option } from "@/lib/crm/types";
 
 /**
@@ -111,18 +112,12 @@ export function DealForm({
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-muted">Contact</span>
-          <select
+          <ContactSelect
             name="contact_id"
-            defaultValue={deal?.contact_id ?? ""}
-            className={FIELD}
-          >
-            <option value="">No contact</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+            contacts={contacts}
+            companies={companies}
+            defaultValue={deal?.contact_id ?? undefined}
+          />
         </label>
 
         <label className="flex flex-col gap-1.5">

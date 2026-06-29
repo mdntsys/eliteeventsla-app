@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/servicing/types";
+import { optionalText, optionalUuid } from "@/lib/forms/coercions";
 
 /**
  * Server actions for the servicing module (client service tickets + comment
@@ -14,24 +15,6 @@ import type { ActionState } from "@/lib/servicing/types";
  * client, revalidates affected paths, and returns an ActionState (or
  * redirects).
  */
-
-// --- Reusable field coercions -----------------------------------------------
-
-const optionalText = z
-  .string()
-  .transform((v) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  })
-  .nullable();
-
-const optionalUuid = z
-  .string()
-  .transform((v) => v.trim())
-  .refine((v) => v === "" || z.uuid().safeParse(v).success, {
-    message: "Invalid id.",
-  })
-  .transform((v) => (v === "" ? null : v));
 
 // --- Enums ------------------------------------------------------------------
 
