@@ -101,13 +101,29 @@ const RemoveItemSchema = z.object({
   id: z.uuid("A line item is required."),
 });
 
-const AddScheduleSchema = z.object({
-  event_id: z.uuid("An event is required."),
-  type: scheduleTypeEnum,
-  scheduled_start: optionalTimestamp,
-  scheduled_end: optionalTimestamp,
-  address: optionalText,
-});
+const AddScheduleSchema = z
+  .object({
+    event_id: z.uuid("An event is required."),
+    type: scheduleTypeEnum,
+    scheduled_start: optionalTimestamp,
+    scheduled_end: optionalTimestamp,
+    address: optionalText,
+  })
+  // A start time is required so the stop (and its crew) actually appears on the
+  // Scheduling agenda — which is keyed on scheduled_start. Without one, a stop
+  // and everyone assigned to it silently drops off the schedule.
+  .refine((d) => d.scheduled_start !== null, {
+    message: "A start date and time is required.",
+    path: ["scheduled_start"],
+  })
+  .refine(
+    (d) =>
+      !d.scheduled_start ||
+      !d.scheduled_end ||
+      new Date(d.scheduled_start).getTime() <=
+        new Date(d.scheduled_end).getTime(),
+    { message: "The end can't be before the start.", path: ["scheduled_end"] },
+  );
 
 const UpdateScheduleStatusSchema = z.object({
   id: z.uuid("A schedule entry is required."),

@@ -8,12 +8,14 @@ import { CrewStopCard } from "@/components/events/crew-stop-card";
 
 export const metadata: Metadata = { title: "Scheduling" };
 
-const RANGE_DAYS = 21;
+const RANGE_DAYS = 60;
 
 type View = "mine" | "all";
 
+// Default to "all" so assigned crew is visible to whoever's coordinating — "My
+// stops" is opt-in via ?view=mine (it only shows stops assigned to you).
 function parseView(raw: string | string[] | undefined): View {
-  return raw === "all" ? "all" : "mine";
+  return raw === "mine" ? "mine" : "all";
 }
 
 function dayKey(iso: string): string {
@@ -83,7 +85,7 @@ export default async function SchedulingPage({
       <PageHeader
         eyebrow="Operations"
         title="Scheduling"
-        description="Deliveries, pickups, setups, and teardowns across every job for the next three weeks."
+        description="Deliveries, pickups, setups, and teardowns across every job for the next two months."
       />
 
       <nav className="mb-6 inline-flex rounded-(--radius-card) border border-line bg-card p-1 text-sm">
@@ -116,7 +118,7 @@ export default async function SchedulingPage({
           <p className="eyebrow">No stops assigned to you</p>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted">
             You have no scheduled deliveries, pickups, setups, or teardowns in
-            the next three weeks. Switch to{" "}
+            the next two months. Switch to{" "}
             <Link
               href="/operations/scheduling?view=all"
               className="text-navy underline-offset-2 hover:underline"

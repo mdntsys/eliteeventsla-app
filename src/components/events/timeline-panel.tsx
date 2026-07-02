@@ -299,13 +299,22 @@ function AddScheduleEntryForm({ eventId }: { eventId: string }) {
         <input name="address" type="text" className={FIELD} />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="eyebrow">Start</span>
-        <input name="scheduled_start" type="datetime-local" className={FIELD} />
+        <span className="eyebrow">Start *</span>
+        <input
+          name="scheduled_start"
+          type="datetime-local"
+          required
+          className={FIELD}
+        />
       </label>
       <label className="flex flex-col gap-1">
         <span className="eyebrow">End</span>
         <input name="scheduled_end" type="datetime-local" className={FIELD} />
       </label>
+      <p className="text-xs text-muted sm:col-span-2">
+        A start time is required so the stop and its crew show up on the
+        Scheduling agenda.
+      </p>
 
       {state?.error && (
         <p role="alert" className="text-xs text-red-700 sm:col-span-2">
