@@ -5,6 +5,7 @@ import {
   listContactOptions,
   listCompanyOptions,
   listPipelineStages,
+  listAdminOptions,
 } from "@/lib/crm/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { PipelineBoard } from "@/components/crm/pipeline-board";
@@ -15,11 +16,12 @@ export const metadata: Metadata = { title: "Pipeline" };
 export default async function CrmPipelinePage() {
   await requireView("crm");
 
-  const [columns, contacts, companies, stages] = await Promise.all([
+  const [columns, contacts, companies, stages, admins] = await Promise.all([
     listPipeline(),
     listContactOptions(),
     listCompanyOptions(),
     listPipelineStages(),
+    listAdminOptions(),
   ]);
 
   const stageOptions = stages.map((s) => ({ id: s.id, label: s.name }));
@@ -37,6 +39,7 @@ export default async function CrmPipelinePage() {
             contacts={contacts}
             companies={companies}
             stages={stageOptions}
+            admins={admins}
           />
         }
       />

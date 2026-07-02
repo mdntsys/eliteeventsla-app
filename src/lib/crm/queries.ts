@@ -250,7 +250,7 @@ export async function listDeals(): Promise<DealRow[]> {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "*, contacts(first_name, last_name), companies(name), pipeline_stages(name)",
+      "*, contacts(first_name, last_name), companies(name), pipeline_stages(name), owner:profiles!deals_owner_id_fkey(full_name)",
     )
     .order("created_at", { ascending: false });
 
@@ -260,17 +260,19 @@ export async function listDeals(): Promise<DealRow[]> {
     contacts: ContactNameRow;
     companies: { name: string } | null;
     pipeline_stages: { name: string } | null;
+    owner: { full_name: string | null } | null;
   };
 
   const deals = (data ?? []) as unknown as DealWithJoins[];
 
   return deals.map((d) => {
-    const { contacts, companies, pipeline_stages, ...rest } = d;
+    const { contacts, companies, pipeline_stages, owner, ...rest } = d;
     return {
       ...rest,
       contact_name: contactName(contacts),
       company_name: companies?.name ?? null,
       stage_name: pipeline_stages?.name ?? null,
+      owner_name: owner?.full_name ?? null,
     };
   });
 }
@@ -286,7 +288,7 @@ export async function getDeal(id: string): Promise<DealDetail | null> {
   const { data, error } = await supabase
     .from("deals")
     .select(
-      "*, contacts(first_name, last_name), companies(name), pipeline_stages(name)",
+      "*, contacts(first_name, last_name), companies(name), pipeline_stages(name), owner:profiles!deals_owner_id_fkey(full_name)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -294,11 +296,12 @@ export async function getDeal(id: string): Promise<DealDetail | null> {
   if (error) throw new Error(error.message);
   if (!data) return null;
 
-  const { contacts, companies, pipeline_stages, ...deal } =
+  const { contacts, companies, pipeline_stages, owner, ...deal } =
     data as typeof data & {
       contacts: ContactNameRow;
       companies: { name: string } | null;
       pipeline_stages: { name: string } | null;
+      owner: { full_name: string | null } | null;
     };
 
   const { data: activitiesData, error: activitiesError } = await supabase
@@ -314,6 +317,7 @@ export async function getDeal(id: string): Promise<DealDetail | null> {
     contact_name: contactName(contacts),
     company_name: companies?.name ?? null,
     stage_name: pipeline_stages?.name ?? null,
+    owner_name: owner?.full_name ?? null,
     activities: mapActivities(activitiesData),
   };
 }
@@ -359,6 +363,28 @@ export async function listStaffOptions(): Promise<Option[]> {
     .from("profiles")
     .select("id, full_name")
     .not("role", "is", null)
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((p) => ({
+    id: p.id,
+    label: p.full_name ?? "Unnamed",
+  }));
+}
+
+/**
+ * Active ADMINS (id + name) for the deal "Lead Owner" picker. Admins are the
+ * `admin` role plus super-admins (the owner tier). Ordered by name.
+ */
+export async function listAdminOptions(): Promise<Option[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .or("role.eq.admin,is_super_admin.eq.true")
     .eq("is_active", true)
     .order("full_name", { ascending: true });
 

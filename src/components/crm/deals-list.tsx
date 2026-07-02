@@ -27,7 +27,14 @@ function formatDate(value: string | null): string {
 }
 
 function haystack(d: DealRow): string {
-  return [d.title, d.stage_name, d.contact_name, d.company_name, d.status]
+  return [
+    d.title,
+    d.stage_name,
+    d.contact_name,
+    d.company_name,
+    d.owner_name,
+    d.status,
+  ]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -71,6 +78,12 @@ export function DealsList({ deals }: { deals: DealRow[] }) {
                   <th className="px-4 py-3 font-medium text-muted">
                     Contact / Company
                   </th>
+                  <th className="px-4 py-3 font-medium text-muted">
+                    Lead owner
+                  </th>
+                  <th className="px-4 py-3 font-medium text-muted">
+                    Follow-up due
+                  </th>
                   <th className="px-4 py-3 text-right font-medium text-muted">
                     Value
                   </th>
@@ -102,6 +115,14 @@ export function DealsList({ deals }: { deals: DealRow[] }) {
                         <StatusBadge status={d.status} />
                       </td>
                       <td className="px-4 py-3 text-ink">{who}</td>
+                      <td className="px-4 py-3 text-ink">
+                        {d.owner_name ?? (
+                          <span className="text-muted">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted">
+                        {formatDate(d.follow_up_date)}
+                      </td>
                       <td className="px-4 py-3 text-right text-ink">
                         {formatMoney(d.estimated_value)}
                       </td>

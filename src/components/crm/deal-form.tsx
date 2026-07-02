@@ -27,11 +27,13 @@ export function DealForm({
   contacts,
   companies,
   stages,
+  admins,
 }: {
   deal?: Deal;
   contacts: Option[];
   companies: Option[];
   stages: Option[];
+  admins: Option[];
 }) {
   const editing = Boolean(deal);
   const [open, setOpen] = useState(false);
@@ -134,6 +136,32 @@ export function DealForm({
               </option>
             ))}
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Lead owner</span>
+          <select
+            name="owner_id"
+            defaultValue={deal?.owner_id ?? ""}
+            className={FIELD}
+          >
+            <option value="">Unassigned</option>
+            {admins.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Follow-up due</span>
+          <input
+            name="follow_up_date"
+            type="date"
+            defaultValue={deal?.follow_up_date ?? ""}
+            className={FIELD}
+          />
         </label>
 
         <label className="flex flex-col gap-1.5">

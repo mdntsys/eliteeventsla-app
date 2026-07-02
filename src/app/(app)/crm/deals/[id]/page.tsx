@@ -8,6 +8,7 @@ import {
   listCompanyOptions,
   listPipelineStages,
   listStaffOptions,
+  listAdminOptions,
 } from "@/lib/crm/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
@@ -67,12 +68,13 @@ export default async function DealDetailPage({
   await requireView("crm");
   const { id } = await params;
 
-  const [deal, contacts, companies, stages, staff] = await Promise.all([
+  const [deal, contacts, companies, stages, staff, admins] = await Promise.all([
     getDeal(id),
     listContactOptions(),
     listCompanyOptions(),
     listPipelineStages(),
     listStaffOptions(),
+    listAdminOptions(),
   ]);
 
   if (!deal) notFound();
@@ -148,6 +150,12 @@ export default async function DealDetailPage({
             <SummaryField label="Expected event date">
               {formatDate(deal.expected_event_date)}
             </SummaryField>
+            <SummaryField label="Lead owner">
+              {deal.owner_name ?? "Unassigned"}
+            </SummaryField>
+            <SummaryField label="Follow-up due">
+              {formatDate(deal.follow_up_date)}
+            </SummaryField>
             {deal.source && (
               <SummaryField label="Source">{deal.source}</SummaryField>
             )}
@@ -158,6 +166,7 @@ export default async function DealDetailPage({
             contacts={contacts}
             companies={companies}
             stages={stageOptions}
+            admins={admins}
           />
         </section>
 

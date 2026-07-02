@@ -56,6 +56,7 @@ export type DealRow = Deal & {
   contact_name: string | null;
   company_name: string | null;
   stage_name: string | null;
+  owner_name: string | null;
 };
 
 /** The full deal detail used by the detail page. */

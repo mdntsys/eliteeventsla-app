@@ -262,6 +262,7 @@ export type Database = {
           estimated_value: number | null
           event_type: Database["public"]["Enums"]["event_type"] | null
           expected_event_date: string | null
+          follow_up_date: string | null
           id: string
           notes: string | null
           owner_id: string | null
@@ -279,6 +280,7 @@ export type Database = {
           estimated_value?: number | null
           event_type?: Database["public"]["Enums"]["event_type"] | null
           expected_event_date?: string | null
+          follow_up_date?: string | null
           id?: string
           notes?: string | null
           owner_id?: string | null
@@ -296,6 +298,7 @@ export type Database = {
           estimated_value?: number | null
           event_type?: Database["public"]["Enums"]["event_type"] | null
           expected_event_date?: string | null
+          follow_up_date?: string | null
           id?: string
           notes?: string | null
           owner_id?: string | null
