@@ -72,6 +72,9 @@ export function CsvImport() {
       </div>
 
       <p className="mb-4 text-sm text-muted">
+        Adds <strong className="text-ink">new items only</strong> — any row whose
+        SKU already exists is skipped, so your current inventory is never
+        overwritten. Only <code className="text-ink">name</code> is required.
         Columns: <code className="text-ink">{CSV_HEADER}</code>.{" "}
         <a
           href={TEMPLATE_HREF}
@@ -102,6 +105,9 @@ export function CsvImport() {
           <div className="rounded-(--radius-card) border border-line bg-cream p-4 text-sm">
             <p className="font-medium text-navy">
               Created {state.created ?? 0}, skipped {state.skipped ?? 0}
+              {state.skippedExisting
+                ? ` (${state.skippedExisting} already had that SKU)`
+                : ""}
             </p>
             {state.errors && state.errors.length > 0 && (
               <ul className="mt-2 list-disc space-y-1 pl-5 text-red-700">

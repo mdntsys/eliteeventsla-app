@@ -434,6 +434,8 @@ export type ImportInventoryResult =
       success?: boolean;
       created?: number;
       skipped?: number;
+      /** Of `skipped`, how many were skipped because the SKU already exists. */
+      skippedExisting?: number;
       errors?: string[];
     }
   | undefined;
@@ -467,16 +469,27 @@ export async function importInventoryCsv(
   const user = await getUser();
   const supabase = await createClient();
 
-  // Reference data for resolving categories / locations / rows by name.
-  const [categoriesRes, locationsRes, rowsRes] = await Promise.all([
+  // Reference data for resolving categories / locations / rows by name, plus
+  // every SKU already on file so we can ADD new items only and skip any SKU that
+  // already exists (existing inventory is left untouched).
+  const [categoriesRes, locationsRes, rowsRes, existingRes] = await Promise.all([
     supabase.from("inventory_categories").select("id, name"),
     supabase.from("locations").select("id, name"),
     supabase.from("warehouse_rows").select("id, label, location_id"),
+    supabase.from("inventory_items").select("sku"),
   ]);
 
   if (categoriesRes.error) return { error: categoriesRes.error.message };
   if (locationsRes.error) return { error: locationsRes.error.message };
   if (rowsRes.error) return { error: rowsRes.error.message };
+  if (existingRes.error) return { error: existingRes.error.message };
+
+  // SKUs already present (case-insensitive). We add to this set as we insert so
+  // a SKU repeated within the same file is also skipped after its first row.
+  const existingSkus = new Set<string>();
+  for (const it of existingRes.data ?? []) {
+    if (it.sku) existingSkus.add(normalizeKey(it.sku));
+  }
 
   const categoryByName = new Map<string, string>();
   for (const c of categoriesRes.data ?? []) {
@@ -494,6 +507,7 @@ export async function importInventoryCsv(
 
   let created = 0;
   let skipped = 0;
+  let skippedExisting = 0;
   const errors: string[] = [];
 
   for (let i = 0; i < rows.length; i++) {
@@ -537,6 +551,14 @@ export async function importInventoryCsv(
         : null;
 
     const sku = get("sku") || null;
+    // Add new SKUs only: if this SKU already exists (on file or earlier in this
+    // same import), skip the row so existing inventory is never overwritten.
+    if (sku && existingSkus.has(normalizeKey(sku))) {
+      skipped += 1;
+      skippedExisting += 1;
+      continue;
+    }
+
     const section = get("section") || null;
     const description = get("description") || null;
 
@@ -578,9 +600,11 @@ export async function importInventoryCsv(
       continue;
     }
 
+    // Track the new SKU so a later duplicate in this same file is skipped too.
+    if (sku) existingSkus.add(normalizeKey(sku));
     created += 1;
   }
 
   revalidatePath("/operations/inventory");
-  return { success: true, created, skipped, errors };
+  return { success: true, created, skipped, skippedExisting, errors };
 }
