@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireEdit } from "@/lib/auth/dal";
+import { getUser, getProfile, requireEdit } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import type { ActionState } from "@/lib/events/types";
 import {
   notifyBookingConfirmed,
@@ -130,11 +131,18 @@ const UpdateScheduleStatusSchema = z.object({
   status: scheduleStatusEnum,
 });
 
-const AssignStaffSchema = z.object({
-  schedule_entry_id: z.uuid("A schedule entry is required."),
-  profile_id: z.uuid("A staff member is required."),
-  role_on_job: optionalText,
-});
+const AssignStaffSchema = z
+  .object({
+    schedule_entry_id: z.uuid("A schedule entry is required."),
+    profile_id: optionalUuid,
+    crew_member_id: optionalUuid,
+    role_on_job: optionalText,
+  })
+  // A stop's crew is one staff profile OR one crew member — exactly one.
+  .refine(
+    (d) => (d.profile_id ? 1 : 0) + (d.crew_member_id ? 1 : 0) === 1,
+    { message: "Pick a staff member or crew.", path: ["profile_id"] },
+  );
 
 const UnassignStaffSchema = z.object({
   id: z.uuid("An assignment is required."),
@@ -459,6 +467,7 @@ export async function assignStaff(
   const parsed = AssignStaffSchema.safeParse({
     schedule_entry_id: formData.get("schedule_entry_id"),
     profile_id: formData.get("profile_id"),
+    crew_member_id: formData.get("crew_member_id"),
     role_on_job: formData.get("role_on_job"),
   });
   if (!parsed.success) {
@@ -471,6 +480,7 @@ export async function assignStaff(
   const { error } = await supabase.from("schedule_assignments").insert({
     schedule_entry_id: data.schedule_entry_id,
     profile_id: data.profile_id,
+    crew_member_id: data.crew_member_id,
     role_on_job: data.role_on_job,
   });
 
@@ -481,7 +491,8 @@ export async function assignStaff(
     return { error: error.message };
   }
 
-  // Resolve the parent event to revalidate its hub page + notify the crew member.
+  // Resolve the parent event to revalidate its hub page + notify the crew member
+  // (only a login staff profile has an email — crew members don't).
   const { data: entry } = await supabase
     .from("schedule_entries")
     .select("event_id, scheduled_start")
@@ -489,7 +500,7 @@ export async function assignStaff(
     .maybeSingle();
   if (entry?.event_id) {
     revalidatePath(`/events/${entry.event_id}`);
-    try {
+    if (data.profile_id) try {
       const [{ data: prof }, { data: ev }] = await Promise.all([
         supabase
           .from("profiles")
@@ -552,6 +563,54 @@ export async function unassignStaff(
   }
   revalidatePath("/operations/scheduling");
   return { success: true };
+}
+
+/** Result of an inline crew create: the new option on success, else an error. */
+export type CreateCrewInlineResult =
+  | { ok: true; crew: { id: string; label: string } }
+  | { ok: false; error: string };
+
+const CreateCrewInlineSchema = z.object({
+  name: z.string().trim().min(1, "A name is required."),
+  phone: optionalText,
+});
+
+/**
+ * Create a lightweight crew member (name + phone, no login) and return it as a
+ * picker option — without redirecting. Powers "add crew without leaving the
+ * assign form", mirroring createContactInline. Gated on scheduling-edit (the
+ * same right the crew_members RLS enforces on insert); returns a clean inline
+ * error on a permission miss rather than redirecting out of the page.
+ */
+export async function createCrewInline(
+  input: unknown,
+): Promise<CreateCrewInlineResult> {
+  const profile = await getProfile();
+  if (!profile || !profile.is_active || !canEdit(profile, "scheduling")) {
+    return { ok: false, error: "You don't have permission to add crew." };
+  }
+
+  const parsed = CreateCrewInlineSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+
+  const user = await getUser();
+  const supabase = await createClient();
+
+  const { data: inserted, error } = await supabase
+    .from("crew_members")
+    .insert({
+      name: parsed.data.name,
+      phone: parsed.data.phone,
+      created_by: user?.id ?? null,
+    })
+    .select("id, name")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, error: error?.message ?? "Could not add the crew member." };
+  }
+
+  return { ok: true, crew: { id: inserted.id, label: inserted.name } };
 }
 
 /**

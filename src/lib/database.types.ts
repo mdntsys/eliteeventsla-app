@@ -253,6 +253,44 @@ export type Database = {
           },
         ]
       }
+      crew_members: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          name: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_members_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deals: {
         Row: {
           company_id: string | null
@@ -1345,29 +1383,39 @@ export type Database = {
       schedule_assignments: {
         Row: {
           created_at: string
+          crew_member_id: string | null
           id: string
           notes: string | null
-          profile_id: string
+          profile_id: string | null
           role_on_job: string | null
           schedule_entry_id: string
         }
         Insert: {
           created_at?: string
+          crew_member_id?: string | null
           id?: string
           notes?: string | null
-          profile_id: string
+          profile_id?: string | null
           role_on_job?: string | null
           schedule_entry_id: string
         }
         Update: {
           created_at?: string
+          crew_member_id?: string | null
           id?: string
           notes?: string | null
-          profile_id?: string
+          profile_id?: string | null
           role_on_job?: string | null
           schedule_entry_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "schedule_assignments_crew_member_id_fkey"
+            columns: ["crew_member_id"]
+            isOneToOne: false
+            referencedRelation: "crew_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "schedule_assignments_profile_id_fkey"
             columns: ["profile_id"]

@@ -6,7 +6,9 @@
  */
 
 export type SchedulingAssignment = {
-  profile_id: string;
+  // Null for crew-member assignments (no login profile); such rows are skipped
+  // by double-booking detection, which only tracks login staff.
+  profile_id: string | null;
   staff_name?: string | null;
 };
 
@@ -75,6 +77,7 @@ export function computeCrewConflicts(entries: SchedulingEntry[]): {
       continue;
     }
     for (const a of e.assignments ?? []) {
+      if (!a.profile_id) continue; // crew member (no login) — not tracked here
       const list = byPerson.get(a.profile_id) ?? [];
       list.push({ entry: e, start, end, name: a.staff_name ?? null });
       byPerson.set(a.profile_id, list);

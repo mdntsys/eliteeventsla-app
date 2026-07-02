@@ -6,6 +6,7 @@ import { canView, canEdit } from "@/lib/auth/roles";
 import {
   getEvent,
   listStaff,
+  listCrew,
   checkAvailability,
   listEventInvoices,
   getEventCrewConflicts,
@@ -128,9 +129,10 @@ export default async function EventDetailPage({
   const canBill = canView(profile, "accounting");
   const canEditEvents = canEdit(profile, "events");
 
-  const [ev, staff, inventory] = await Promise.all([
+  const [ev, staff, crew, inventory] = await Promise.all([
     getEvent(id),
     listStaff(),
+    listCrew(),
     listInventory(),
   ]);
 
@@ -281,7 +283,12 @@ export default async function EventDetailPage({
           inventory={inventory}
         />
 
-        <TimelinePanel ev={ev} staff={staff} crewConflicts={crewConflicts} />
+        <TimelinePanel
+          ev={ev}
+          staff={staff}
+          crew={crew}
+          crewConflicts={crewConflicts}
+        />
 
         <EventVendorsPanel
           eventId={ev.id}

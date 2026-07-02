@@ -17,6 +17,9 @@ import type {
 } from "@/lib/events/types";
 import type { CrewConflict } from "@/lib/events/scheduling";
 import { StatusBadge } from "@/components/inventory/status-badge";
+import { CrewAssignSelect } from "@/components/events/crew-assign-select";
+
+type CrewOption = { id: string; label: string };
 
 /**
  * Timeline + staff surface for a single event. Lists schedule entries (delivery,
@@ -177,30 +180,22 @@ function AssignmentRowView({ assignment }: { assignment: AssignmentRow }) {
 function AssignStaffForm({
   entryId,
   staff,
+  crew,
 }: {
   entryId: string;
   staff: StaffMember[];
+  crew: CrewOption[];
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     assignStaff,
     undefined,
   );
   return (
-    <form action={action} className="mt-2 flex flex-wrap items-end gap-2">
+    <form action={action} className="mt-2 flex flex-wrap items-start gap-2">
       <input type="hidden" name="schedule_entry_id" value={entryId} />
       <label className="flex flex-col gap-1">
         <span className="eyebrow">Assign</span>
-        <select name="profile_id" required defaultValue="" className={FIELD}>
-          <option value="" disabled>
-            Select staff…
-          </option>
-          {staff.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.full_name ?? "Unnamed"}
-              {s.role ? ` (${s.role})` : ""}
-            </option>
-          ))}
-        </select>
+        <CrewAssignSelect staff={staff} crew={crew} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="eyebrow">Role on job</span>
@@ -209,7 +204,7 @@ function AssignStaffForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-(--radius-card) border border-line bg-cream px-3.5 py-2 text-sm font-medium text-navy transition hover:border-navy disabled:opacity-60"
+        className="mt-[1.35rem] rounded-(--radius-card) border border-line bg-cream px-3.5 py-2 text-sm font-medium text-navy transition hover:border-navy disabled:opacity-60"
       >
         {pending ? "Adding…" : "Add"}
       </button>
@@ -237,10 +232,12 @@ function formatOther(start: string | null, end: string | null): string {
 function ScheduleEntryCard({
   entry,
   staff,
+  crew,
   conflicts,
 }: {
   entry: ScheduleEntryRow;
   staff: StaffMember[];
+  crew: CrewOption[];
   conflicts?: CrewConflict[];
 }) {
   return (
@@ -277,7 +274,7 @@ function ScheduleEntryCard({
             ))}
           </ul>
         )}
-        <AssignStaffForm entryId={entry.id} staff={staff} />
+        <AssignStaffForm entryId={entry.id} staff={staff} crew={crew} />
 
         {conflicts && conflicts.length > 0 && (
           <div className="mt-3 rounded-(--radius-card) border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -385,10 +382,12 @@ function AddScheduleEntryForm({ eventId }: { eventId: string }) {
 export function TimelinePanel({
   ev,
   staff,
+  crew,
   crewConflicts,
 }: {
   ev: EventDetail;
   staff: StaffMember[];
+  crew: CrewOption[];
   crewConflicts?: Record<string, CrewConflict[]>;
 }) {
   return (
@@ -414,6 +413,7 @@ export function TimelinePanel({
               key={entry.id}
               entry={entry}
               staff={staff}
+              crew={crew}
               conflicts={crewConflicts?.[entry.id]}
             />
           ))}

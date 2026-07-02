@@ -220,19 +220,21 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
   if (entryIds.length > 0) {
     const { data: asgData, error: asgError } = await supabase
       .from("schedule_assignments")
-      .select("*, profiles(full_name, role)")
+      .select("*, profiles(full_name, role), crew_members(name)")
       .in("schedule_entry_id", entryIds)
       .order("created_at", { ascending: true });
     if (asgError) throw new Error(asgError.message);
 
     for (const row of asgData ?? []) {
-      const { profiles, ...rest } = row as typeof row & {
+      const { profiles, crew_members, ...rest } = row as typeof row & {
         profiles: { full_name: string | null; role: string | null } | null;
+        crew_members: { name: string | null } | null;
       };
+      // A stop's crew is either a staff profile or a lightweight crew member.
       const assignment: AssignmentRow = {
         ...rest,
-        staff_name: profiles?.full_name ?? null,
-        staff_role: profiles?.role ?? null,
+        staff_name: profiles?.full_name ?? crew_members?.name ?? null,
+        staff_role: profiles?.role ?? (crew_members ? "crew" : null),
       };
       const list = assignmentsByEntry.get(rest.schedule_entry_id) ?? [];
       list.push(assignment);
@@ -279,6 +281,23 @@ export async function listStaff(): Promise<StaffMember[]> {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as StaffMember[];
+}
+
+/**
+ * Active crew members (id + name) for the assignment picker — the lightweight,
+ * non-login people who work events. Ordered by name.
+ */
+export async function listCrew(): Promise<{ id: string; label: string }[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("crew_members")
+    .select("id, name")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((c) => ({ id: c.id, label: c.name }));
 }
 
 // --- checkAvailability ------------------------------------------------------
@@ -437,20 +456,22 @@ export async function listScheduleInRange(
 
   const { data: asgData, error: asgError } = await supabase
     .from("schedule_assignments")
-    .select("*, profiles(full_name, role)")
+    .select("*, profiles(full_name, role), crew_members(name)")
     .in("schedule_entry_id", entryIds)
     .order("created_at", { ascending: true });
 
   if (asgError) throw new Error(asgError.message);
 
   for (const row of asgData ?? []) {
-    const { profiles, ...rest } = row as typeof row & {
+    const { profiles, crew_members, ...rest } = row as typeof row & {
       profiles: { full_name: string | null; role: string | null } | null;
+      crew_members: { name: string | null } | null;
     };
+    // A stop's crew is either a staff profile or a lightweight crew member.
     const assignment: AssignmentRow = {
       ...rest,
-      staff_name: profiles?.full_name ?? null,
-      staff_role: profiles?.role ?? null,
+      staff_name: profiles?.full_name ?? crew_members?.name ?? null,
+      staff_role: profiles?.role ?? (crew_members ? "crew" : null),
     };
     const list = assignmentsByEntry.get(rest.schedule_entry_id) ?? [];
     list.push(assignment);
@@ -491,12 +512,16 @@ export async function getEventCrewConflicts(
 
   const mine = (mineData ?? []) as {
     id: string;
-    schedule_assignments: { profile_id: string }[] | null;
+    schedule_assignments: { profile_id: string | null }[] | null;
   }[];
   const myEntryIds = new Set(mine.map((e) => e.id));
+  // Only login staff (profile_id) participate in double-booking detection; crew
+  // members have no profile_id, so filter the nulls out.
   const profileIds = Array.from(
     new Set(
-      mine.flatMap((e) => (e.schedule_assignments ?? []).map((a) => a.profile_id)),
+      mine
+        .flatMap((e) => (e.schedule_assignments ?? []).map((a) => a.profile_id))
+        .filter((id): id is string => Boolean(id)),
     ),
   );
   if (profileIds.length === 0) return {};
