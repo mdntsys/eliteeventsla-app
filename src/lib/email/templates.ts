@@ -172,6 +172,29 @@ export function invoiceEmail(p: {
   };
 }
 
+export function invoiceVoidedEmail(p: {
+  invoiceNumber?: string | null;
+  amountText?: string | null;
+  recipientName?: string | null;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const ref = p.invoiceNumber ? ` <strong>${p.invoiceNumber}</strong>` : "";
+  const refText = p.invoiceNumber ? ` ${p.invoiceNumber}` : "";
+  const forAmount = p.amountText ? ` for <strong>${p.amountText}</strong>` : "";
+  const forAmountText = p.amountText ? ` for ${p.amountText}` : "";
+  const html = layout("Your invoice has been voided", `
+    <p ${P}>${hi}</p>
+    <p ${P}>We're letting you know that your invoice${ref}${forAmount} has been <strong>voided</strong> and is no longer due. No payment is required, and any payment link we may have sent for it is now inactive.</p>
+    <p ${P}>If you think this was done in error, or you have any questions, just reply to this email and we'll be glad to help.</p>
+    <p ${P}>Thank you for choosing Elite Events LA.</p>`);
+  const text = `${hi}\n\nYour invoice${refText}${forAmountText} has been voided and is no longer due. No payment is required, and any payment link we may have sent for it is now inactive.\n\nIf this was done in error or you have questions, just reply to this email.\n\nThank you for choosing Elite Events LA.`;
+  return {
+    subject: `Invoice voided${p.invoiceNumber ? ` — ${p.invoiceNumber}` : ""} · Elite Events LA`,
+    html,
+    text,
+  };
+}
+
 export function welcomeEmail(p: {
   fullName?: string | null;
   email: string;

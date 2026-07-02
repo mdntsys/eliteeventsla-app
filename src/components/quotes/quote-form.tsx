@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { createQuote } from "@/lib/quotes/actions";
 import { formatMoney } from "@/lib/accounting/format";
 import { Modal } from "@/components/ui/modal";
+import { ContactSelect } from "@/components/crm/contact-select";
 import type { ActionState, Option } from "@/lib/quotes/types";
 
 /**
@@ -86,14 +87,11 @@ export function QuoteForm({
 
             <label className="flex flex-col gap-1.5">
               <span className="text-xs text-muted">Contact</span>
-              <select name="contact_id" defaultValue="" className={FIELD}>
-                <option value="">No contact</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+              <ContactSelect
+                name="contact_id"
+                contacts={contacts}
+                companies={companies}
+              />
             </label>
 
             <label className="flex flex-col gap-1.5">

@@ -1,9 +1,13 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 import { createInvoice } from "@/lib/accounting/actions";
 import { formatMoney } from "@/lib/accounting/format";
 import { Modal } from "@/components/ui/modal";
+import {
+  ContactSelect,
+  type ContactSelectOption,
+} from "@/components/crm/contact-select";
 import type { ActionState, ContactOption, Option } from "@/lib/accounting/types";
 
 /**
@@ -40,7 +44,8 @@ export function InvoiceForm({
   companies: Option[];
 }) {
   const [open, setOpen] = useState(false);
-  const [contactId, setContactId] = useState("");
+  const [selectedContact, setSelectedContact] =
+    useState<ContactSelectOption | null>(null);
   const [lines, setLines] = useState<Line[]>([{ ...BLANK }]);
   const [tax, setTax] = useState("0");
   const [state, action, pending] = useActionState<ActionState, FormData>(
@@ -48,12 +53,9 @@ export function InvoiceForm({
     undefined,
   );
 
-  const selectedContact = useMemo(
-    () => contacts.find((c) => c.id === contactId) ?? null,
-    [contacts, contactId],
-  );
   // When the chosen contact belongs to a company, that's the invoice's company —
-  // no need to ask (and no way to pick a mismatched one).
+  // no need to ask (and no way to pick a mismatched one). Works for both an
+  // existing pick and a contact just added inline (its company rides along).
   const derivedCompany =
     selectedContact?.company_id && selectedContact.company_name
       ? { id: selectedContact.company_id, name: selectedContact.company_name }
@@ -97,20 +99,13 @@ export function InvoiceForm({
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="eyebrow">Contact</span>
-                <select
+                <ContactSelect
                   name="contact_id"
-                  value={contactId}
-                  onChange={(e) => setContactId(e.target.value)}
-                  className={FIELD}
-                >
-                  <option value="">No contact</option>
-                  {contacts.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                      {c.company_name ? ` · ${c.company_name}` : ""}
-                    </option>
-                  ))}
-                </select>
+                  contacts={contacts}
+                  companies={companies}
+                  showCompanyInLabel
+                  onChange={(_id, contact) => setSelectedContact(contact)}
+                />
               </label>
 
               {/* Company: auto-derived from the contact when known, otherwise a

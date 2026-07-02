@@ -56,6 +56,7 @@ export type TicketFilter = {
 
 export type TicketFormOptions = {
   contacts: { id: string; label: string }[];
+  companies: { id: string; label: string }[];
   events: { id: string; title: string }[];
 };
 

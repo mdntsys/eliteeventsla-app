@@ -228,18 +228,23 @@ export async function listEventTickets(
 // --- listTicketFormOptions --------------------------------------------------
 
 /**
- * Contacts (id + "First Last") and events (id + title) for linking a new
- * ticket. Staff for the assignee picker is sourced from listStaff() in
+ * Contacts (id + "First Last"), companies (id + name), and events (id + title)
+ * for linking a new ticket. Companies feed the inline "add a contact" panel's
+ * company picker. Staff for the assignee picker is sourced from listStaff() in
  * "@/lib/events/queries" — not redefined here.
  */
 export async function listTicketFormOptions(): Promise<TicketFormOptions> {
   const supabase = await createClient();
 
-  const [contactsRes, eventsRes] = await Promise.all([
+  const [contactsRes, companiesRes, eventsRes] = await Promise.all([
     supabase
       .from("contacts")
       .select("id, first_name, last_name")
       .order("first_name", { ascending: true }),
+    supabase
+      .from("companies")
+      .select("id, name")
+      .order("name", { ascending: true }),
     supabase
       .from("events")
       .select("id, title")
@@ -247,6 +252,7 @@ export async function listTicketFormOptions(): Promise<TicketFormOptions> {
   ]);
 
   if (contactsRes.error) throw new Error(contactsRes.error.message);
+  if (companiesRes.error) throw new Error(companiesRes.error.message);
   if (eventsRes.error) throw new Error(eventsRes.error.message);
 
   const contacts = (contactsRes.data ?? [])
@@ -255,10 +261,15 @@ export async function listTicketFormOptions(): Promise<TicketFormOptions> {
       label: contactName(c) ?? "Unnamed contact",
     }));
 
+  const companies = (companiesRes.data ?? []).map((c) => ({
+    id: c.id,
+    label: c.name ?? "Unnamed company",
+  }));
+
   const events = (eventsRes.data ?? []).map((e) => ({
     id: e.id,
     title: e.title,
   }));
 
-  return { contacts, events };
+  return { contacts, companies, events };
 }

@@ -8,6 +8,7 @@ import {
   returnReceiptEmail,
   paymentLinkEmail,
   invoiceEmail,
+  invoiceVoidedEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -156,6 +157,24 @@ export async function notifyInvoice(
   if (!to) return { ok: false, skipped: true, error: "No recipient email." };
   // Always BCC the team so they have inbox proof the invoice was sent.
   return sendEmail({ to, bcc: getInvoiceBcc(), ...invoiceEmail(p), attachments });
+}
+
+/**
+ * Notify a client their invoice has been VOIDED (no longer due). BCCs the team
+ * (same INVOICE_BCC list as invoice sends) so the group has inbox proof the
+ * notice went out. Returns the SendResult so the action can report whether it
+ * actually went out (or was skipped because email isn't configured).
+ */
+export async function notifyInvoiceVoided(
+  to: string | null | undefined,
+  p: {
+    invoiceNumber?: string | null;
+    amountText?: string | null;
+    recipientName?: string | null;
+  },
+): Promise<SendResult> {
+  if (!to) return { ok: false, skipped: true, error: "No recipient email." };
+  return sendEmail({ to, bcc: getInvoiceBcc(), ...invoiceVoidedEmail(p) });
 }
 
 export async function notifyReturnReceipt(

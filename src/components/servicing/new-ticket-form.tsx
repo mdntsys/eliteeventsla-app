@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createTicket } from "@/lib/servicing/actions";
 import { Modal } from "@/components/ui/modal";
+import { ContactSelect } from "@/components/crm/contact-select";
 import type { ActionState } from "@/lib/servicing/types";
 import type { StaffMember } from "@/lib/events/types";
 
@@ -36,10 +37,12 @@ function titleize(value: string): string {
 
 export function NewTicketForm({
   contacts,
+  companies,
   events,
   staff,
 }: {
   contacts: { id: string; label: string }[];
+  companies: { id: string; label: string }[];
   events: { id: string; title: string }[];
   staff: StaffMember[];
 }) {
@@ -143,14 +146,12 @@ export function NewTicketForm({
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-muted">Client</span>
-          <select name="contact_id" defaultValue="" className={FIELD}>
-            <option value="">No client</option>
-            {contacts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+          <ContactSelect
+            name="contact_id"
+            contacts={contacts}
+            companies={companies}
+            placeholder="No client"
+          />
         </label>
       </div>
 

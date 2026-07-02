@@ -12,7 +12,11 @@ import { getStripe } from "@/lib/stripe";
 import { reconcileInvoiceAndActivateEvent } from "@/lib/accounting/reconcile";
 import { getInvoiceByToken } from "@/lib/invoices/public";
 import { formatDate } from "@/lib/accounting/format";
-import { notifyPaymentLink, notifyInvoice } from "@/lib/email/send";
+import {
+  notifyPaymentLink,
+  notifyInvoice,
+  notifyInvoiceVoided,
+} from "@/lib/email/send";
 import type { ActionState } from "@/lib/accounting/types";
 import {
   money,
@@ -198,6 +202,19 @@ export async function updateInvoiceStatus(
   }
 
   const supabase = await createClient();
+
+  // Load the invoice + its client BEFORE updating: we need the prior status to
+  // detect a real void transition, and the client's email/name to notify them.
+  const { data: before, error: loadError } = await supabase
+    .from("invoices")
+    .select(
+      "id, status, invoice_number, total_amount, contacts(first_name, last_name, email), companies(name, email)",
+    )
+    .eq("id", parsed.data.id)
+    .maybeSingle();
+  if (loadError) return { error: loadError.message };
+  if (!before) return { error: "Invoice not found." };
+
   const { error } = await supabase
     .from("invoices")
     .update({ status: parsed.data.status })
@@ -208,6 +225,68 @@ export async function updateInvoiceStatus(
   revalidatePath(`/accounting/invoices/${parsed.data.id}`);
   revalidatePath("/accounting/invoices");
   revalidatePath("/accounting");
+
+  // On a genuine void — an already-issued invoice moving to 'void' — email the
+  // client that it's been voided and BCC the team. Skip drafts (never sent to
+  // the client) and no-op re-voids. A failed/absent email must NOT fail the
+  // status change, so we report it as a soft note alongside success.
+  type ClientRow = {
+    status: string;
+    invoice_number: string | null;
+    total_amount: number | null;
+    contacts: {
+      first_name: string | null;
+      last_name: string | null;
+      email: string | null;
+    } | null;
+    companies: { name: string | null; email: string | null } | null;
+  };
+  const inv = before as unknown as ClientRow;
+  const becameVoid =
+    parsed.data.status === "void" &&
+    inv.status !== "void" &&
+    inv.status !== "draft";
+
+  if (becameVoid) {
+    const to = inv.contacts?.email ?? inv.companies?.email ?? null;
+    if (!to) {
+      return {
+        success: true,
+        error:
+          "Invoice voided. No email on file for the client, so no notice was sent.",
+      };
+    }
+    const recipientName =
+      [inv.contacts?.first_name, inv.contacts?.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() ||
+      inv.companies?.name ||
+      null;
+    const amountText =
+      inv.total_amount != null
+        ? `$${round2(inv.total_amount).toFixed(2)}`
+        : null;
+
+    const send = await notifyInvoiceVoided(to, {
+      invoiceNumber: inv.invoice_number,
+      amountText,
+      recipientName,
+    });
+    if (send.ok) return { success: true, emailedTo: to };
+    if (send.skipped) {
+      return {
+        success: true,
+        error:
+          "Invoice voided. Email isn't configured (RESEND_API_KEY missing), so the client wasn't notified.",
+      };
+    }
+    return {
+      success: true,
+      error: `Invoice voided, but the void notice failed to send: ${send.error ?? "unknown error"}.`,
+    };
+  }
+
   return { success: true };
 }
 

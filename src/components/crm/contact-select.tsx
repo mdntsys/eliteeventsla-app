@@ -5,17 +5,29 @@ import { createContactInline } from "@/lib/crm/actions";
 import type { Option } from "@/lib/crm/types";
 
 /**
- * Contact picker with inline "add a contact" — drop-in for a `<select
+ * Contact picker with inline "add a contact" — a drop-in for a `<select
  * name="contact_id">`. Picking an existing contact works as a plain select;
  * "+ New contact" reveals a small panel that creates the contact via
- * `createContactInline` and selects it in place, so you never leave the deal
- * form to add someone and come back.
+ * `createContactInline` and selects it in place, so you never leave the
+ * surrounding form (deal, invoice, quote, event, ticket) to add someone and
+ * come back.
  *
  * The inline inputs are deliberately **name-less** and live outside any nested
- * <form> (which would be invalid HTML inside the parent deal form). They're
- * plain React state fed straight to the server action; only the controlled
+ * <form> (which would be invalid HTML inside the parent form). They're plain
+ * React state fed straight to the server action; only the controlled
  * `<select name={name}>` participates in the surrounding form submission.
+ *
+ * `onChange` lets a parent react to the selection (e.g. the invoice form
+ * deriving the company from the chosen contact) for both existing picks and
+ * freshly added contacts. `showCompanyInLabel` appends " · Company" to options
+ * that carry one; `placeholder` labels the empty option.
  */
+
+/** A contact option that may carry its company (for labels + parent deriving). */
+export type ContactSelectOption = Option & {
+  company_id?: string | null;
+  company_name?: string | null;
+};
 
 const FIELD =
   "rounded-(--radius-card) border border-line bg-cream px-3.5 py-2.5 text-ink outline-none transition focus:border-navy";
@@ -28,13 +40,19 @@ export function ContactSelect({
   contacts,
   companies,
   defaultValue,
+  placeholder = "No contact",
+  showCompanyInLabel = false,
+  onChange,
 }: {
   name: string;
-  contacts: Option[];
+  contacts: ContactSelectOption[];
   companies: Option[];
   defaultValue?: string;
+  placeholder?: string;
+  showCompanyInLabel?: boolean;
+  onChange?: (value: string, contact: ContactSelectOption | null) => void;
 }) {
-  const [options, setOptions] = useState<Option[]>(contacts);
+  const [options, setOptions] = useState<ContactSelectOption[]>(contacts);
   const [value, setValue] = useState(defaultValue ?? "");
   const [adding, setAdding] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -56,6 +74,12 @@ export function ContactSelect({
     setError(null);
   }
 
+  /** Commit a new value + notify the parent with the resolved option. */
+  function selectValue(next: string, list: ContactSelectOption[] = options) {
+    setValue(next);
+    onChange?.(next, list.find((o) => o.id === next) ?? null);
+  }
+
   function handleAdd() {
     setError(null);
     if (firstName.trim() === "") {
@@ -74,10 +98,21 @@ export function ContactSelect({
         setError(res.error);
         return;
       }
-      setOptions((prev) =>
-        [...prev, res.contact].sort((a, b) => a.label.localeCompare(b.label)),
+      // Enrich the new option with its company (from the draft's picker) so a
+      // parent deriving the company from the contact stays correct.
+      const companyName = companyId
+        ? (companies.find((c) => c.id === companyId)?.label ?? null)
+        : null;
+      const newOption: ContactSelectOption = {
+        ...res.contact,
+        company_id: companyId || null,
+        company_name: companyName,
+      };
+      const nextOptions = [...options, newOption].sort((a, b) =>
+        a.label.localeCompare(b.label),
       );
-      setValue(res.contact.id);
+      setOptions(nextOptions);
+      selectValue(newOption.id, nextOptions);
       setAdding(false);
       resetDraft();
     });
@@ -96,13 +131,14 @@ export function ContactSelect({
       <select
         name={name}
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => selectValue(e.target.value)}
         className={FIELD}
       >
-        <option value="">No contact</option>
+        <option value="">{placeholder}</option>
         {options.map((c) => (
           <option key={c.id} value={c.id}>
             {c.label}
+            {showCompanyInLabel && c.company_name ? ` · ${c.company_name}` : ""}
           </option>
         ))}
       </select>

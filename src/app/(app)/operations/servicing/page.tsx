@@ -137,6 +137,7 @@ export default async function ServicingPage({
         action={
           <NewTicketForm
             contacts={formOptions.contacts}
+            companies={formOptions.companies}
             events={formOptions.events}
             staff={staff}
           />

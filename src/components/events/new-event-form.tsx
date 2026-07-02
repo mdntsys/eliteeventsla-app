@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createEvent } from "@/lib/events/actions";
 import { Modal } from "@/components/ui/modal";
+import { ContactSelect } from "@/components/crm/contact-select";
 import type { ActionState } from "@/lib/events/types";
 
 /**
@@ -73,14 +74,12 @@ export function NewEventForm({
 
             <label className="flex flex-col gap-1.5">
               <span className="eyebrow">Client contact</span>
-              <select name="contact_id" defaultValue="" className={FIELD}>
-                <option value="">None</option>
-                {contacts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
+              <ContactSelect
+                name="contact_id"
+                contacts={contacts}
+                companies={companies}
+                placeholder="None"
+              />
             </label>
 
             <label className="flex flex-col gap-1.5">

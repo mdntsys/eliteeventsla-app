@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { getUser, requireEdit } from "@/lib/auth/dal";
+import { getUser, getProfile, requireEdit } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import {
   optionalDate,
   optionalDateTime,
@@ -252,7 +253,17 @@ const CreateContactInlineSchema = z.object({
 export async function createContactInline(
   input: unknown,
 ): Promise<CreateContactInlineResult> {
-  await requireEdit("crm");
+  // This runs from inside another module's form modal (invoice, quote, event,
+  // ticket), so a permission failure must return a clean inline error rather
+  // than redirect the whole page out of the modal (what requireEdit does).
+  // Gate on crm-edit — the same right the contacts-table RLS enforces on insert.
+  const profile = await getProfile();
+  if (!profile || !profile.is_active || !canEdit(profile, "crm")) {
+    return {
+      ok: false,
+      error: "You don't have permission to add a contact.",
+    };
+  }
 
   const parsed = CreateContactInlineSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
