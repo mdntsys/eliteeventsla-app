@@ -1,7 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { logActivity, completeActivity } from "@/lib/crm/actions";
+import {
+  logActivity,
+  completeActivity,
+  deleteActivity,
+} from "@/lib/crm/actions";
 import type { ActionState, ActivityView, Option } from "@/lib/crm/types";
 
 /**
@@ -97,6 +101,44 @@ function CompleteButton({
   );
 }
 
+function DeleteActivityButton({
+  activityId,
+  parentId,
+}: {
+  activityId: string;
+  parentId: string;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    deleteActivity,
+    undefined,
+  );
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!window.confirm("Delete this entry? This can't be undone.")) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={activityId} />
+      <input type="hidden" name="parentId" value={parentId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-full border border-line px-3 py-1 text-xs font-medium text-muted transition hover:border-red-700 hover:text-red-700 disabled:opacity-60"
+      >
+        {pending ? "Deleting…" : "Delete"}
+      </button>
+      {state?.error && (
+        <p role="alert" className="mt-1 text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function ActivityItem({
   activity,
   parentId,
@@ -141,9 +183,12 @@ function ActivityItem({
             </span>
           )}
         </div>
-        {isOpenTask && (
-          <CompleteButton activityId={activity.id} parentId={parentId} />
-        )}
+        <div className="flex items-center gap-2">
+          {isOpenTask && (
+            <CompleteButton activityId={activity.id} parentId={parentId} />
+          )}
+          <DeleteActivityButton activityId={activity.id} parentId={parentId} />
+        </div>
       </div>
     </li>
   );

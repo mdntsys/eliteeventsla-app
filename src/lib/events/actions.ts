@@ -140,6 +140,14 @@ const UnassignStaffSchema = z.object({
   id: z.uuid("An assignment is required."),
 });
 
+const DeleteEventSchema = z.object({
+  id: z.uuid("An event is required."),
+});
+
+const DeleteScheduleEntrySchema = z.object({
+  id: z.uuid("A schedule entry is required."),
+});
+
 const CheckOutSchema = z.object({
   id: z.uuid("A line item is required."),
 });
@@ -544,6 +552,83 @@ export async function unassignStaff(
   }
   revalidatePath("/operations/scheduling");
   return { success: true };
+}
+
+/**
+ * Delete a schedule entry (a delivery/pickup/setup stop). Its crew assignments
+ * cascade away with it (FK ON DELETE CASCADE). Use to clear a stop entered by
+ * mistake. Returns to the event hub + the scheduling agenda.
+ */
+export async function deleteScheduleEntry(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("scheduling");
+
+  const parsed = DeleteScheduleEntrySchema.safeParse({
+    id: formData.get("id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const supabase = await createClient();
+  const { data: removed, error } = await supabase
+    .from("schedule_entries")
+    .delete()
+    .eq("id", parsed.data.id)
+    .select("event_id")
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  if (removed?.event_id) {
+    revalidatePath(`/events/${removed.event_id}`);
+  }
+  revalidatePath("/operations/scheduling");
+  return { success: true };
+}
+
+/**
+ * Hard-delete an event entered by mistake. Its schedule, reserved items,
+ * vendors, and activity log cascade away; linked invoices/payments are protected
+ * by ON DELETE RESTRICT, so an event with recorded payments can't be deleted
+ * (cancel it instead). Redirects to the events list on success.
+ */
+export async function deleteEvent(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("events");
+
+  const parsed = DeleteEventSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", parsed.data.id);
+
+  if (error) {
+    // 23503 = FK violation: a recorded payment (ON DELETE RESTRICT) blocks it.
+    if (pgCode(error) === "23503") {
+      return {
+        error:
+          "This event has recorded payments, so it can't be deleted. Cancel the event instead (Status → Cancelled).",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/events");
+  revalidatePath("/operations/scheduling");
+  // redirect() throws to navigate — keep it outside any try/catch.
+  redirect("/events");
 }
 
 export async function checkOutItem(

@@ -128,6 +128,10 @@ const CompleteActivitySchema = z.object({
   id: z.uuid("An activity is required."),
 });
 
+const DeleteActivitySchema = z.object({
+  id: z.uuid("An activity is required."),
+});
+
 /** Pull the first zod issue message for a friendly action error. */
 function firstError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Please check your input.";
@@ -724,6 +728,42 @@ export async function completeActivity(
     revalidatePath(`/crm/contacts/${parentId}`);
     revalidatePath(`/crm/companies/${parentId}`);
     revalidatePath(`/crm/deals/${parentId}`);
+  }
+  return { success: true };
+}
+
+/**
+ * Delete an activity / note entered by mistake. Refreshes whichever owning
+ * entity (contact / company / deal / event) it was attached to, plus the
+ * caller's current detail page. Mirrors completeActivity.
+ */
+export async function deleteActivity(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("crm");
+
+  const parsed = DeleteActivitySchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const supabase = await createClient();
+
+  const { data: activity, error } = await supabase
+    .from("activities")
+    .delete()
+    .eq("id", parsed.data.id)
+    .select("contact_id, company_id, deal_id, event_id")
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+
+  if (activity) revalidateActivity(activity);
+  const parentId = formData.get("parentId");
+  if (typeof parentId === "string" && parentId !== "") {
+    revalidatePath(`/crm/contacts/${parentId}`);
+    revalidatePath(`/crm/companies/${parentId}`);
+    revalidatePath(`/crm/deals/${parentId}`);
+    revalidatePath(`/events/${parentId}`);
   }
   return { success: true };
 }

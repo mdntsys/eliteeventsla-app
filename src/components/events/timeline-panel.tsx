@@ -6,6 +6,7 @@ import {
   assignStaff,
   unassignStaff,
   updateScheduleStatus,
+  deleteScheduleEntry,
 } from "@/lib/events/actions";
 import type {
   ActionState,
@@ -124,6 +125,41 @@ function UnassignButton({ assignmentId }: { assignmentId: string }) {
   );
 }
 
+function DeleteEntryButton({ entryId }: { entryId: string }) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    deleteScheduleEntry,
+    undefined,
+  );
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (
+          !window.confirm(
+            "Remove this stop? Its crew assignments are removed too.",
+          )
+        ) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <input type="hidden" name="id" value={entryId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-xs text-muted transition hover:text-red-700 disabled:opacity-60"
+      >
+        {pending ? "Removing…" : "Remove"}
+      </button>
+      {state?.error && (
+        <p role="alert" className="mt-1 text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function AssignmentRowView({ assignment }: { assignment: AssignmentRow }) {
   return (
     <li className="flex items-center justify-between gap-3 rounded-(--radius-card) border border-line bg-cream px-3 py-1.5 text-sm">
@@ -224,7 +260,10 @@ function ScheduleEntryCard({
             <p className="mt-0.5 text-xs text-muted">{entry.address}</p>
           )}
         </div>
-        <ScheduleStatusControl entryId={entry.id} status={entry.status} />
+        <div className="flex flex-col items-end gap-1.5">
+          <ScheduleStatusControl entryId={entry.id} status={entry.status} />
+          <DeleteEntryButton entryId={entry.id} />
+        </div>
       </div>
 
       <div className="mt-3 border-t border-line pt-3">

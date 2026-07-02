@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireView } from "@/lib/auth/dal";
-import { canView } from "@/lib/auth/roles";
+import { canView, canEdit } from "@/lib/auth/roles";
 import {
   getEvent,
   listStaff,
@@ -16,6 +16,7 @@ import { listEventTickets } from "@/lib/servicing/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { EventStatusControl } from "@/components/events/event-status-control";
 import { TimelinePanel } from "@/components/events/timeline-panel";
+import { DeleteEventButton } from "@/components/events/delete-event-button";
 import { InventoryPanel } from "@/components/events/inventory-panel";
 import { ReturnsPanel } from "@/components/events/returns-panel";
 import { EventVendorsPanel } from "@/components/events/event-vendors-panel";
@@ -125,6 +126,7 @@ export default async function EventDetailPage({
   const profile = await requireView("events");
   const { id } = await params;
   const canBill = canView(profile, "accounting");
+  const canEditEvents = canEdit(profile, "events");
 
   const [ev, staff, inventory] = await Promise.all([
     getEvent(id),
@@ -290,6 +292,22 @@ export default async function EventDetailPage({
         <EventTicketsPanel eventId={ev.id} rows={eventTickets} staff={staff} />
 
         <ReturnsPanel ev={ev} />
+
+        {canEditEvents && (
+          <section className="rounded-(--radius-card) border border-red-200 bg-red-50/40 p-6">
+            <p className="eyebrow text-red-700">Danger zone</p>
+            <h2 className="font-display mt-0.5 text-xl font-light text-navy">
+              Delete this event
+            </h2>
+            <p className="mt-1 mb-4 max-w-prose text-sm text-muted">
+              Removes the event and everything attached to it — schedule,
+              reserved items, vendors, and notes. Invoices and recorded payments
+              are kept (an event with payments can&rsquo;t be deleted). This
+              can&rsquo;t be undone.
+            </p>
+            <DeleteEventButton eventId={ev.id} eventTitle={ev.title} />
+          </section>
+        )}
       </div>
     </>
   );
