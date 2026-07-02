@@ -13,11 +13,13 @@ import {
 } from "@/lib/email/templates";
 
 /**
- * Server-only email sending. Every path is GUARDED + NON-THROWING: when
- * RESEND_API_KEY is absent (it currently is), sendEmail no-ops and logs, so the
- * triggers wired into actions never break a user flow. The typed notify*
- * helpers resolve a recipient and fire the right template — call them
- * fire-and-forget from server actions; they swallow their own errors.
+ * Server-only email sending. Every path is GUARDED + NON-THROWING: if
+ * RESEND_API_KEY is absent (e.g. a local shell without env loaded), sendEmail
+ * no-ops and logs instead of throwing, so the triggers wired into actions never
+ * break a user flow. When the key IS set (the configured/deployed case), email
+ * sends for real. The typed notify* helpers resolve a recipient and fire the
+ * right template — call them fire-and-forget from server actions; they swallow
+ * their own errors.
  */
 
 export type SendResult = { ok: boolean; skipped: boolean; error?: string };
