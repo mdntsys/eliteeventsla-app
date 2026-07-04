@@ -18,15 +18,34 @@
  * user_module_permissions.module.
  */
 
+/**
+ * The internal business roles — the only ones assignable in the Team console.
+ * `affiliate` is deliberately NOT here so it never appears as a staff role
+ * option; it is an EXTERNAL role (own login + own portal, zero internal access).
+ */
 export const APP_ROLES = ["admin", "sales", "ops", "accounting"] as const;
-export type AppRole = (typeof APP_ROLES)[number];
+export type InternalRole = (typeof APP_ROLES)[number];
+
+/**
+ * Every role a `profiles.role` can hold, including the external `affiliate`.
+ * Affiliates have their own portal and no internal-area access (see
+ * ROLE_AREA_DEFAULTS.affiliate = {}). Kept in the union so `role` is type-safe
+ * wherever it is read.
+ */
+export type AppRole = InternalRole | "affiliate";
 
 export const ROLE_LABELS: Record<AppRole, string> = {
   admin: "Admin",
   sales: "Sales & Marketing",
   ops: "Operations",
   accounting: "Accounting",
+  affiliate: "Affiliate",
 };
+
+/** True for the external affiliate role (own portal, no internal areas). */
+export function isAffiliate(role: AppRole | null | undefined): boolean {
+  return role === "affiliate";
+}
 
 /**
  * The 9 togglable areas. NOTE: the "admin" Team console is intentionally NOT an
@@ -102,6 +121,9 @@ export const ROLE_AREA_DEFAULTS: Record<
     accounting: { view: true, edit: true },
     events: { view: true, edit: false },
   },
+  // Affiliates have NO internal-area access — they live entirely in the separate
+  // affiliate portal, scoped to their own data by row-ownership RLS.
+  affiliate: {},
 };
 
 type AccessSubject = {

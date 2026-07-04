@@ -1802,11 +1802,12 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      is_internal_user: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       activity_type: "call" | "email" | "meeting" | "note" | "task"
-      app_role: "admin" | "sales" | "ops" | "accounting"
+      app_role: "admin" | "sales" | "ops" | "accounting" | "affiliate"
       attachment_kind: "return_proof" | "delivery_proof" | "other"
       deal_status: "open" | "won" | "lost"
       event_status:
@@ -1994,7 +1995,7 @@ export const Constants = {
   public: {
     Enums: {
       activity_type: ["call", "email", "meeting", "note", "task"],
-      app_role: ["admin", "sales", "ops", "accounting"],
+      app_role: ["admin", "sales", "ops", "accounting", "affiliate"],
       attachment_kind: ["return_proof", "delivery_proof", "other"],
       deal_status: ["open", "won", "lost"],
       event_status: [
