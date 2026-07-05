@@ -233,6 +233,45 @@ export function affiliateWelcomeEmail(p: {
   return { subject: "Your Elite Events LA partner account", html, text };
 }
 
+export function commissionEarnedEmail(p: {
+  recipientName?: string | null;
+  amountText: string;
+  eventTitle?: string | null;
+  portalUrl: string;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const forEvent = p.eventTitle
+    ? ` from <strong>${p.eventTitle}</strong>`
+    : "";
+  const forEventText = p.eventTitle ? ` from ${p.eventTitle}` : "";
+  const button = `<a href="${p.portalUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;font-size:14px;">View your portal</a>`;
+  const html = layout("You earned a commission", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Good news — a referral you sent to Elite Events LA has been paid in full, so you've earned a commission of <strong>${p.amountText}</strong>${forEvent}.</p>
+    <p ${P}>It's been added to your owed balance and will be included in your next payout.</p>
+    <p style="margin:18px 0;">${button}</p>`);
+  const text = `${hi}\n\nA referral you sent to Elite Events LA has been paid in full, so you've earned a commission of ${p.amountText}${forEventText}. It's been added to your owed balance and will be included in your next payout.\n\nView your portal: ${p.portalUrl}`;
+  return { subject: "You earned a commission", html, text };
+}
+
+export function payoutRecordedEmail(p: {
+  recipientName?: string | null;
+  amountText: string;
+  methodText?: string | null;
+  portalUrl: string;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const via = p.methodText ? ` via ${p.methodText}` : "";
+  const button = `<a href="${p.portalUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;font-size:14px;">View your payouts</a>`;
+  const html = layout("A commission payout was recorded", `
+    <p ${P}>${hi}</p>
+    <p ${P}>We've recorded a commission payout of <strong>${p.amountText}</strong>${via}. It covers commissions that were awaiting payout on your account.</p>
+    <p ${P}>You can review it any time in your partner portal under Payouts.</p>
+    <p style="margin:18px 0;">${button}</p>`);
+  const text = `${hi}\n\nWe've recorded a commission payout of ${p.amountText}${via}. It covers commissions that were awaiting payout on your account.\n\nView your payouts: ${p.portalUrl}`;
+  return { subject: "Your Elite Events LA commission payout", html, text };
+}
+
 export function welcomeEmail(p: {
   fullName?: string | null;
   email: string;

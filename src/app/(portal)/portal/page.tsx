@@ -38,6 +38,15 @@ export default async function PortalDashboardPage() {
         <p className="text-sm text-muted">
           Your commission rate: <span className="text-ink">{pct}%</span>
         </p>
+
+        <div>
+          <a
+            href="/portal/statement"
+            className="inline-flex rounded-(--radius-card) border border-line px-4 py-2 text-sm text-muted transition hover:border-navy hover:text-navy"
+          >
+            Download commission statement (PDF)
+          </a>
+        </div>
       </div>
     </>
   );

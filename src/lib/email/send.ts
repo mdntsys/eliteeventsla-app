@@ -9,6 +9,8 @@ import {
   paymentLinkEmail,
   invoiceEmail,
   invoiceVoidedEmail,
+  commissionEarnedEmail,
+  payoutRecordedEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -184,4 +186,41 @@ export async function notifyReturnReceipt(
   p: { eventTitle: string; recipientName?: string | null },
 ): Promise<void> {
   await fire(to, returnReceiptEmail(p));
+}
+
+/**
+ * The affiliate portal URL for links in partner emails. Works from both a server
+ * action and the (headerless) webhook path: prefers APP_URL, else the production
+ * host. No request headers needed, so it's safe to call from the reconciler.
+ */
+function portalUrl(): string {
+  const base = (process.env.APP_URL ?? "https://app.eliteeventsla.com").replace(
+    /\/$/,
+    "",
+  );
+  return `${base}/portal`;
+}
+
+/** Tell an affiliate a commission accrued (their attributed invoice was paid). */
+export async function notifyCommissionEarned(
+  to: string | null | undefined,
+  p: {
+    recipientName?: string | null;
+    amountText: string;
+    eventTitle?: string | null;
+  },
+): Promise<void> {
+  await fire(to, commissionEarnedEmail({ ...p, portalUrl: portalUrl() }));
+}
+
+/** Tell an affiliate a payout was recorded against their account. */
+export async function notifyPayoutRecorded(
+  to: string | null | undefined,
+  p: {
+    recipientName?: string | null;
+    amountText: string;
+    methodText?: string | null;
+  },
+): Promise<void> {
+  await fire(to, payoutRecordedEmail({ ...p, portalUrl: portalUrl() }));
 }

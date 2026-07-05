@@ -7,7 +7,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit, requireSuperAdmin } from "@/lib/auth/dal";
-import { sendEmail } from "@/lib/email/send";
+import { sendEmail, notifyPayoutRecorded } from "@/lib/email/send";
 import { affiliateWelcomeEmail } from "@/lib/email/templates";
 import { createAffiliateContract } from "@/lib/documents/actions";
 import { resyncEventAffiliateCommissions } from "@/lib/accounting/reconcile";
@@ -212,6 +212,13 @@ export async function updateAffiliate(
   return { success: true };
 }
 
+/** Humanized payout methods for the affiliate's notification email. */
+const PAYOUT_METHOD_TEXT: Record<string, string> = {
+  bank_transfer: "bank transfer",
+  check: "check",
+  cash: "cash",
+};
+
 const RecordPayoutSchema = z.object({
   affiliate_id: z.uuid("An affiliate is required."),
   method: optionalText,
@@ -322,6 +329,22 @@ export async function recordPayout(
     )
     .eq("status", "accrued");
   if (markErr) return { error: markErr.message };
+
+  // Notify the affiliate their payout was recorded (guarded, fire-and-forget).
+  const { data: affProfile } = await supabase
+    .from("affiliates")
+    .select("profiles!affiliates_profile_id_fkey(full_name, email)")
+    .eq("id", affiliate_id)
+    .maybeSingle();
+  const prof =
+    (affProfile as {
+      profiles: { full_name: string | null; email: string | null } | null;
+    } | null)?.profiles ?? null;
+  await notifyPayoutRecorded(prof?.email, {
+    recipientName: prof?.full_name,
+    amountText: `$${total.toFixed(2)}`,
+    methodText: PAYOUT_METHOD_TEXT[method ?? ""] ?? null,
+  });
 
   revalidatePath(`/affiliates/${affiliate_id}`);
   return {

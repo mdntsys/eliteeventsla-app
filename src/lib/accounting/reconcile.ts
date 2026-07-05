@@ -2,7 +2,7 @@ import "server-only";
 
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { notifyBookingConfirmed } from "@/lib/email/send";
+import { notifyBookingConfirmed, notifyCommissionEarned } from "@/lib/email/send";
 
 /**
  * The single source of truth for "money landed on an invoice".
@@ -173,15 +173,21 @@ export async function accrueAffiliateCommission(
 
   if (target) {
     if (!existing) {
-      await supabase.from("affiliate_commissions").insert({
-        affiliate_id: target.affiliate_id,
-        event_id: target.event_id,
-        invoice_id: invoiceId,
-        basis_amount: target.basis,
-        rate: target.rate,
-        amount: target.amount,
-        status: "accrued",
-      });
+      const { error: insErr } = await supabase
+        .from("affiliate_commissions")
+        .insert({
+          affiliate_id: target.affiliate_id,
+          event_id: target.event_id,
+          invoice_id: invoiceId,
+          basis_amount: target.basis,
+          rate: target.rate,
+          amount: target.amount,
+          status: "accrued",
+        });
+      // A newly accrued commission: tell the affiliate (guarded, fire-and-forget).
+      if (!insErr) {
+        await notifyAffiliateCommission(supabase, target.affiliate_id, target.event_id, target.amount);
+      }
     } else if (existing.status !== "paid") {
       // Re-accrue: a reversed→repaid invoice, or an affiliate/rate/basis change
       // while the commission has not yet been paid out. A paid-out commission is
@@ -205,6 +211,46 @@ export async function accrueAffiliateCommission(
       .from("affiliate_commissions")
       .update({ status: "reversed" })
       .eq("id", existing.id);
+  }
+}
+
+/**
+ * Email an affiliate that a commission just accrued. Best-effort: resolves the
+ * affiliate's name/email + the event title with whatever (privileged) client the
+ * reconciler holds, then fires the guarded notify helper. Never throws — a failed
+ * lookup or send must not break payment reconciliation.
+ */
+async function notifyAffiliateCommission(
+  supabase: SupabaseClient,
+  affiliateId: string,
+  eventId: string,
+  amount: number,
+): Promise<void> {
+  try {
+    const { data: affRow } = await supabase
+      .from("affiliates")
+      .select("profiles!affiliates_profile_id_fkey(full_name, email)")
+      .eq("id", affiliateId)
+      .maybeSingle();
+    const prof =
+      (affRow as {
+        profiles: { full_name: string | null; email: string | null } | null;
+      } | null)?.profiles ?? null;
+    if (!prof?.email) return;
+
+    const { data: evRow } = await supabase
+      .from("events")
+      .select("title")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    await notifyCommissionEarned(prof.email, {
+      recipientName: prof.full_name,
+      amountText: `$${amount.toFixed(2)}`,
+      eventTitle: (evRow as { title: string | null } | null)?.title ?? null,
+    });
+  } catch (e) {
+    console.error("[email] commission-earned failed:", e);
   }
 }
 
