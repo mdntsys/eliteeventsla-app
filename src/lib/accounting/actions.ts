@@ -248,6 +248,31 @@ export async function updateInvoiceStatus(
     inv.status !== "draft";
 
   if (becameVoid) {
+    // Deactivate any live Stripe payment link for this invoice so the void
+    // notice's "now inactive" promise actually holds — otherwise a client could
+    // still pay a voided invoice, which the webhook would reconcile and (worse)
+    // use to activate the linked event for a cancelled booking. Guarded like
+    // ensurePaymentLink so a Stripe outage/misconfig can't fail the void itself.
+    try {
+      const stripe = getStripe();
+      const { data: pendingLinks } = await supabase
+        .from("payments")
+        .select("stripe_payment_link_id")
+        .eq("invoice_id", parsed.data.id)
+        .eq("method", "stripe")
+        .eq("status", "pending")
+        .not("stripe_payment_link_id", "is", null);
+      for (const row of pendingLinks ?? []) {
+        if (row.stripe_payment_link_id) {
+          await stripe.paymentLinks.update(row.stripe_payment_link_id, {
+            active: false,
+          });
+        }
+      }
+    } catch {
+      // Stripe unconfigured or an API error must not block the status change.
+    }
+
     const to = inv.contacts?.email ?? inv.companies?.email ?? null;
     if (!to) {
       return {

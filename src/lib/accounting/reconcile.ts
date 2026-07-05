@@ -88,8 +88,10 @@ export async function reconcileInvoiceAndActivateEvent(
 
   // Activate the linked event on first money in: a deposit (or full payment)
   // confirms a tentative (draft) booking. Never downgrades a further-along event.
+  // A voided invoice never activates its event — the booking is cancelled, so a
+  // stray payment on a dead link must not confirm it.
   let eventActivated = false;
-  if (paid > 0 && invoice.event_id) {
+  if (paid > 0 && invoice.event_id && status !== "void") {
     eventActivated = await activateEvent(supabase, invoice.event_id);
   }
 

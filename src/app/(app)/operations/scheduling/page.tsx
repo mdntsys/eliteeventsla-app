@@ -10,6 +10,12 @@ export const metadata: Metadata = { title: "Scheduling" };
 
 const RANGE_DAYS = 60;
 
+// Elite Events LA operates in Los Angeles; render all schedule days/headings in
+// LA time so this server-rendered "My stops" view and the client-rendered "All
+// jobs" agenda always agree on which calendar day a stop falls on (a UTC server
+// would otherwise date an evening LA stop a day off).
+const BUSINESS_TZ = "America/Los_Angeles";
+
 type View = "mine" | "all";
 
 // Default to "all" so assigned crew is visible to whoever's coordinating — "My
@@ -21,7 +27,8 @@ function parseView(raw: string | string[] | undefined): View {
 function dayKey(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "unknown";
-  return d.toISOString().slice(0, 10);
+  // en-CA yields YYYY-MM-DD; in BUSINESS_TZ so grouping matches the LA heading.
+  return d.toLocaleDateString("en-CA", { timeZone: BUSINESS_TZ });
 }
 
 function formatDayHeading(iso: string): string {
@@ -32,6 +39,7 @@ function formatDayHeading(iso: string): string {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: BUSINESS_TZ,
   });
 }
 
@@ -48,8 +56,8 @@ export default async function SchedulingPage({
   const user = await getUser();
   const userId = user?.id ?? null;
 
-  // Window: from the start of today through ~21 days out. Computed at request
-  // time on the server; the agenda formats day/time in the viewer's locale.
+  // Window: from the start of today through ~60 days (two months) out. Computed
+  // at request time on the server; days/headings render in BUSINESS_TZ (LA).
   const now = new Date();
   const from = new Date(now);
   from.setHours(0, 0, 0, 0);

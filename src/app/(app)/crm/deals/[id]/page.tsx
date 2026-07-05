@@ -42,6 +42,9 @@ function formatDate(value: string | null): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    // Date-only columns (expected_event_date, follow_up_date) parse as UTC
+    // midnight — format in UTC so they don't render a day early west of UTC.
+    timeZone: "UTC",
   });
 }
 

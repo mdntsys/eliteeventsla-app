@@ -668,6 +668,15 @@ export async function deleteEvent(
   }
 
   const supabase = await createClient();
+
+  // Capture the proof-photo object paths BEFORE the delete: event_attachments
+  // rows cascade away with the event, but the underlying private Storage objects
+  // (client PII) do not — we must remove them explicitly to avoid orphans.
+  const { data: attachments } = await supabase
+    .from("event_attachments")
+    .select("storage_path")
+    .eq("event_id", parsed.data.id);
+
   const { error } = await supabase
     .from("events")
     .delete()
@@ -682,6 +691,13 @@ export async function deleteEvent(
       };
     }
     return { error: error.message };
+  }
+
+  // Event is gone — purge its now-orphaned proof photos from the private bucket.
+  // A storage error here must not fail the delete (the event is already gone).
+  const paths = (attachments ?? []).map((a) => a.storage_path);
+  if (paths.length > 0) {
+    await supabase.storage.from("operations-proofs").remove(paths);
   }
 
   revalidatePath("/events");

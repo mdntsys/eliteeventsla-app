@@ -7,6 +7,7 @@ import Papa from "papaparse";
 import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/inventory/types";
+import type { TablesInsert } from "@/lib/database.types";
 import {
   optionalMoney,
   optionalText,
@@ -509,6 +510,11 @@ export async function importInventoryCsv(
   let skipped = 0;
   let skippedExisting = 0;
   const errors: string[] = [];
+  const toInsert: {
+    record: TablesInsert<"inventory_items">;
+    rowNum: number;
+    name: string;
+  }[] = [];
 
   for (let i = 0; i < rows.length; i++) {
     const raw = rows[i];
@@ -580,29 +586,49 @@ export async function importInventoryCsv(
         ? Number(replacementRaw)
         : null;
 
-    const { error } = await supabase.from("inventory_items").insert({
+    // Collect the row; insert in batches after the loop. Track the SKU now so a
+    // later duplicate within this same file is still skipped.
+    if (sku) existingSkus.add(normalizeKey(sku));
+    toInsert.push({
+      rowNum,
       name,
-      sku,
-      kind,
-      category_id: categoryId,
-      quantity,
-      daily_rate: dailyRate,
-      replacement_cost: replacementCost,
-      location_id: locationId,
-      row_id: rowId,
-      section,
-      description,
-      created_by: user?.id ?? null,
+      record: {
+        name,
+        sku,
+        kind,
+        category_id: categoryId,
+        quantity,
+        daily_rate: dailyRate,
+        replacement_cost: replacementCost,
+        location_id: locationId,
+        row_id: rowId,
+        section,
+        description,
+        created_by: user?.id ?? null,
+      },
     });
+  }
 
-    if (error) {
-      errors.push(`Row ${rowNum} (${name}): ${error.message}`);
+  // Insert in chunks — one round-trip per chunk instead of one per row. If a
+  // chunk fails, fall back to per-row inserts for that chunk so the failure is
+  // attributed to a specific row and the rest of the chunk still lands.
+  const CHUNK = 500;
+  for (let i = 0; i < toInsert.length; i += CHUNK) {
+    const chunk = toInsert.slice(i, i + CHUNK);
+    const { error } = await supabase
+      .from("inventory_items")
+      .insert(chunk.map((r) => r.record));
+    if (!error) {
+      created += chunk.length;
       continue;
     }
-
-    // Track the new SKU so a later duplicate in this same file is skipped too.
-    if (sku) existingSkus.add(normalizeKey(sku));
-    created += 1;
+    for (const r of chunk) {
+      const { error: rowErr } = await supabase
+        .from("inventory_items")
+        .insert(r.record);
+      if (rowErr) errors.push(`Row ${r.rowNum} (${r.name}): ${rowErr.message}`);
+      else created += 1;
+    }
   }
 
   revalidatePath("/operations/inventory");

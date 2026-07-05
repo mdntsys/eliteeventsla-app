@@ -247,14 +247,23 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
     assignments: assignmentsByEntry.get(entry.id) ?? [],
   }));
 
-  const attachments: AttachmentRow[] = await Promise.all(
-    (attachmentsRes.data ?? []).map(async (att) => {
-      const { data: signed } = await supabase.storage
-        .from("operations-proofs")
-        .createSignedUrl(att.storage_path, 3600);
-      return { ...att, signed_url: signed?.signedUrl ?? null };
-    }),
-  );
+  // Sign all attachment URLs in ONE batch call (createSignedUrls) rather than
+  // one Storage round-trip per attachment. The returned array is positionally
+  // aligned with the input paths; a failed path yields a null url.
+  const attachmentRows = attachmentsRes.data ?? [];
+  let attachments: AttachmentRow[] = [];
+  if (attachmentRows.length > 0) {
+    const { data: signedList } = await supabase.storage
+      .from("operations-proofs")
+      .createSignedUrls(
+        attachmentRows.map((a) => a.storage_path),
+        3600,
+      );
+    attachments = attachmentRows.map((att, i) => ({
+      ...att,
+      signed_url: signedList?.[i]?.signedUrl ?? null,
+    }));
+  }
 
   return {
     ...event,

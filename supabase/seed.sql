@@ -3,13 +3,14 @@
 -- Pipeline stages (only seeded when the table is empty so manual edits stick).
 insert into public.pipeline_stages (name, sort_order, is_won, is_lost)
 select v.name, v.sort_order, v.is_won, v.is_lost
+-- Pipeline stages must match migration 0023 (which dropped "Qualified" and
+-- renumbered): New Inquiry > Proposal Sent > Negotiation > Won > Lost.
 from (values
   ('New Inquiry',   1, false, false),
-  ('Qualified',     2, false, false),
-  ('Proposal Sent', 3, false, false),
-  ('Negotiation',   4, false, false),
-  ('Won',           5, true,  false),
-  ('Lost',          6, false, true)
+  ('Proposal Sent', 2, false, false),
+  ('Negotiation',   3, false, false),
+  ('Won',           4, true,  false),
+  ('Lost',          5, false, true)
 ) as v(name, sort_order, is_won, is_lost)
 where not exists (select 1 from public.pipeline_stages);
 

@@ -10,9 +10,13 @@ import {
 
 /**
  * Cross-job agenda: schedule entries grouped by day, each row links to its
- * event and shows time, type, status, and the staff assigned. Client component
- * so day grouping + time formatting render in the viewer's locale/timezone.
+ * event and shows time, type, status, and the staff assigned. Days/headings
+ * render in the business timezone (LA) so this matches the server-rendered
+ * "My stops" tab exactly (see scheduling/page.tsx).
  */
+
+// Keep in sync with BUSINESS_TZ in scheduling/page.tsx.
+const BUSINESS_TZ = "America/Los_Angeles";
 
 type AgendaEntry = ScheduleEntryRow & {
   event_id: string;
@@ -39,7 +43,8 @@ function TypeBadge({ type }: { type: string }) {
 }
 
 function dayKey(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+  // en-CA yields YYYY-MM-DD; in BUSINESS_TZ so grouping matches the LA heading.
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: BUSINESS_TZ });
 }
 
 function formatDayHeading(iso: string): string {
@@ -48,6 +53,7 @@ function formatDayHeading(iso: string): string {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: BUSINESS_TZ,
   });
 }
 
@@ -94,8 +100,8 @@ export function ScheduleAgenda({ entries }: { entries: AgendaEntry[] }) {
       <div className="rounded-(--radius-card) border border-dashed border-line bg-card p-10 text-center">
         <p className="eyebrow">Nothing scheduled</p>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted">
-          No deliveries, pickups, setups, or teardowns fall in the next three
-          weeks. Schedule entries you add from an event timeline will surface
+          No deliveries, pickups, setups, or teardowns fall in the next two
+          months. Schedule entries you add from an event timeline will surface
           here across every job.
         </p>
       </div>

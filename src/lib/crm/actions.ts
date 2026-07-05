@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import type { TablesUpdate } from "@/lib/database.types";
 import { getUser, getProfile, requireEdit } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
 import {
@@ -505,26 +506,34 @@ export async function updateDeal(
   const { id, ...data } = parsed.data;
   const supabase = await createClient();
 
-  const status = await statusForStage(supabase, data.stage_id);
+  const update: TablesUpdate<"deals"> = {
+    title: data.title,
+    contact_id: data.contact_id,
+    company_id: data.company_id,
+    stage_id: data.stage_id,
+    estimated_value: data.estimated_value,
+    expected_event_date: data.expected_event_date,
+    follow_up_date: data.follow_up_date,
+    event_type: data.event_type,
+    source: data.source,
+    owner_id: data.owner_id,
+    notes: data.notes,
+    updated_at: new Date().toISOString(),
+  };
 
-  const { error } = await supabase
+  // Only reconcile status from the stage when the stage actually moved. A plain
+  // edit (e.g. changing the follow-up date) must not clobber a 'won' status set
+  // by convertDealToEvent, which leaves the deal on its pre-win stage.
+  const { data: current } = await supabase
     .from("deals")
-    .update({
-      title: data.title,
-      contact_id: data.contact_id,
-      company_id: data.company_id,
-      stage_id: data.stage_id,
-      estimated_value: data.estimated_value,
-      expected_event_date: data.expected_event_date,
-      follow_up_date: data.follow_up_date,
-      event_type: data.event_type,
-      source: data.source,
-      owner_id: data.owner_id,
-      notes: data.notes,
-      status,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+    .select("stage_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (current?.stage_id !== data.stage_id) {
+    update.status = await statusForStage(supabase, data.stage_id);
+  }
+
+  const { error } = await supabase.from("deals").update(update).eq("id", id);
 
   if (error) return { error: error.message };
 
