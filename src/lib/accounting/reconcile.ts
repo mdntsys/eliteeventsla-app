@@ -105,50 +105,17 @@ export async function reconcileInvoiceAndActivateEvent(
  * Accrue (or reverse) the affiliate commission for one invoice. Commission is
  * earned once the invoice is FULLY paid (contract: "after the Company receives
  * full payment"), computed on the PRE-TAX subtotal at rate = the event's
- * override, else the affiliate's rate. If the invoice later leaves 'paid'
- * (refund/chargeback) an OUTSTANDING accrual is reversed; a commission already
- * included in a payout is left untouched for manual clawback. Runs with whatever
- * (privileged) client the reconciler was given.
+ * override, else the affiliate's rate. If a commission should NO LONGER exist —
+ * the invoice left 'paid' (refund/chargeback), or the event was re-attributed /
+ * un-attributed so no affiliate is owed — an OUTSTANDING accrual is reversed; a
+ * commission already included in a payout is left untouched for manual clawback.
+ * Runs with whatever (privileged) client the reconciler was given.
  */
-async function accrueAffiliateCommission(
+export async function accrueAffiliateCommission(
   supabase: SupabaseClient,
   invoiceId: string,
   invoiceStatus: string,
 ): Promise<void> {
-  const { data: invRow } = await supabase
-    .from("invoices")
-    .select("subtotal, event_id")
-    .eq("id", invoiceId)
-    .maybeSingle();
-  const inv = invRow as {
-    subtotal: number | null;
-    event_id: string | null;
-  } | null;
-  if (!inv?.event_id) return;
-
-  const { data: evRow } = await supabase
-    .from("events")
-    .select("affiliate_id, commission_rate_override")
-    .eq("id", inv.event_id)
-    .maybeSingle();
-  const ev = evRow as {
-    affiliate_id: string | null;
-    commission_rate_override: number | null;
-  } | null;
-  if (!ev?.affiliate_id) return;
-
-  const { data: affRow } = await supabase
-    .from("affiliates")
-    .select("commission_rate")
-    .eq("id", ev.affiliate_id)
-    .maybeSingle();
-  const aff = affRow as { commission_rate: number } | null;
-  if (!aff) return;
-
-  const rate = ev.commission_rate_override ?? aff.commission_rate;
-  const basis = round2(inv.subtotal ?? 0);
-  const amount = round2(basis * rate);
-
   const { data: existingRow } = await supabase
     .from("affiliate_commissions")
     .select("id, status")
@@ -156,38 +123,111 @@ async function accrueAffiliateCommission(
     .maybeSingle();
   const existing = existingRow as { id: string; status: string } | null;
 
+  // Resolve the commission this invoice SHOULD carry, if any: only a fully-paid
+  // invoice, on an event attributed to an existing affiliate, earns one.
+  let target:
+    | { affiliate_id: string; event_id: string; basis: number; rate: number; amount: number }
+    | null = null;
+
   if (invoiceStatus === "paid") {
+    const { data: invRow } = await supabase
+      .from("invoices")
+      .select("subtotal, event_id")
+      .eq("id", invoiceId)
+      .maybeSingle();
+    const inv = invRow as { subtotal: number | null; event_id: string | null } | null;
+
+    if (inv?.event_id) {
+      const { data: evRow } = await supabase
+        .from("events")
+        .select("affiliate_id, commission_rate_override")
+        .eq("id", inv.event_id)
+        .maybeSingle();
+      const ev = evRow as {
+        affiliate_id: string | null;
+        commission_rate_override: number | null;
+      } | null;
+
+      if (ev?.affiliate_id) {
+        const { data: affRow } = await supabase
+          .from("affiliates")
+          .select("commission_rate")
+          .eq("id", ev.affiliate_id)
+          .maybeSingle();
+        const aff = affRow as { commission_rate: number } | null;
+
+        if (aff) {
+          const rate = ev.commission_rate_override ?? aff.commission_rate;
+          const basis = round2(inv.subtotal ?? 0);
+          target = {
+            affiliate_id: ev.affiliate_id,
+            event_id: inv.event_id,
+            basis,
+            rate,
+            amount: round2(basis * rate),
+          };
+        }
+      }
+    }
+  }
+
+  if (target) {
     if (!existing) {
       await supabase.from("affiliate_commissions").insert({
-        affiliate_id: ev.affiliate_id,
-        event_id: inv.event_id,
+        affiliate_id: target.affiliate_id,
+        event_id: target.event_id,
         invoice_id: invoiceId,
-        basis_amount: basis,
-        rate,
-        amount,
+        basis_amount: target.basis,
+        rate: target.rate,
+        amount: target.amount,
         status: "accrued",
       });
     } else if (existing.status !== "paid") {
-      // Re-accrue: a reversed→repaid invoice, or a basis/rate change while the
-      // commission has not yet been paid out. A paid-out commission is left.
+      // Re-accrue: a reversed→repaid invoice, or an affiliate/rate/basis change
+      // while the commission has not yet been paid out. A paid-out commission is
+      // left as-is (its clawback/re-attribution is a manual accounting matter).
       await supabase
         .from("affiliate_commissions")
         .update({
-          affiliate_id: ev.affiliate_id,
-          event_id: inv.event_id,
-          basis_amount: basis,
-          rate,
-          amount,
+          affiliate_id: target.affiliate_id,
+          event_id: target.event_id,
+          basis_amount: target.basis,
+          rate: target.rate,
+          amount: target.amount,
           status: "accrued",
         })
         .eq("id", existing.id);
     }
   } else if (existing && existing.status === "accrued") {
-    // No longer fully paid (refund/chargeback) — reverse the outstanding accrual.
+    // No commission is owed anymore (not fully paid, or the event lost its
+    // affiliate) — reverse the outstanding accrual.
     await supabase
       .from("affiliate_commissions")
       .update({ status: "reversed" })
       .eq("id", existing.id);
+  }
+}
+
+/**
+ * Re-sync every affiliate commission on an event after its attribution or rate
+ * changed. Re-runs accrual for each of the event's invoices, so outstanding
+ * (unpaid) commissions immediately reflect the event's current affiliate + rate,
+ * and any accrual that is no longer owed (attribution cleared) is reversed.
+ * Already-paid commissions are never touched. Give it a PRIVILEGED client — it
+ * reads events/invoices/affiliates and writes affiliate_commissions as a system
+ * side effect of an attribution edit, not a user write.
+ */
+export async function resyncEventAffiliateCommissions(
+  supabase: SupabaseClient,
+  eventId: string,
+): Promise<void> {
+  const { data: invoices } = await supabase
+    .from("invoices")
+    .select("id, status")
+    .eq("event_id", eventId);
+
+  for (const inv of (invoices ?? []) as { id: string; status: string }[]) {
+    await accrueAffiliateCommission(supabase, inv.id, inv.status);
   }
 }
 

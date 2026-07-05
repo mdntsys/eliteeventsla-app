@@ -42,3 +42,36 @@ export type AffiliateEarnings = {
   /** How many commissions are currently accrued/unpaid. */
   accruedCount: number;
 };
+
+/** One of an event's commissions, joined to its invoice number, for display. */
+export type EventCommissionRow = {
+  id: string;
+  invoice_number: string | null;
+  amount: number;
+  rate: number;
+  status: CommissionStatus;
+};
+
+/**
+ * An event's affiliate attribution + this event's commission rollup — the data
+ * behind the event hub's "Affiliate & commission" panel. All rates are stored
+ * fractions (0–1); all amounts are dollars.
+ */
+export type EventAffiliateSummary = {
+  affiliateId: string | null;
+  affiliateName: string | null;
+  affiliateStatus: AffiliateStatus | null;
+  /** The affiliate's own default rate; null when unattributed. */
+  defaultRate: number | null;
+  /** The event's per-event override; null when none is set. */
+  overrideRate: number | null;
+  /** override ?? default; null when unattributed. */
+  effectiveRate: number | null;
+  /** This event's commissions rolled up by status (dollars) + the rows. */
+  commission: {
+    accrued: number;
+    paid: number;
+    reversed: number;
+    rows: EventCommissionRow[];
+  };
+};

@@ -14,6 +14,11 @@ import {
 import { listInventory } from "@/lib/inventory/queries";
 import { listEventVendors, listVendorsForPicker } from "@/lib/vendors/queries";
 import { listEventTickets } from "@/lib/servicing/queries";
+import {
+  getEventAffiliateSummary,
+  listAffiliateOptions,
+} from "@/lib/affiliates/queries";
+import type { EventAffiliateSummary, Option } from "@/lib/affiliates/types";
 import { PageHeader } from "@/components/ui/page-header";
 import { EventStatusControl } from "@/components/events/event-status-control";
 import { TimelinePanel } from "@/components/events/timeline-panel";
@@ -26,6 +31,7 @@ import { JobStageTracker } from "@/components/events/job-stage-tracker";
 import { ReadinessChecklist } from "@/components/events/readiness-checklist";
 import { ProfitabilitySummary } from "@/components/events/profitability-summary";
 import { EventBillingPanel } from "@/components/events/event-billing-panel";
+import { EventAffiliatePanel } from "@/components/events/event-affiliate-panel";
 import {
   deriveStage,
   computeReadiness,
@@ -128,6 +134,8 @@ export default async function EventDetailPage({
   const { id } = await params;
   const canBill = canView(profile, "accounting");
   const canEditEvents = canEdit(profile, "events");
+  const canViewAffiliates = canView(profile, "affiliates");
+  const canEditAffiliates = canEdit(profile, "affiliates");
 
   const [ev, staff, crew, inventory] = await Promise.all([
     getEvent(id),
@@ -191,6 +199,18 @@ export default async function EventDetailPage({
   // Billing panel: show once there's something to bill (a price or any invoice).
   const showBilling =
     eventInvoices.length > 0 || (ev.total_amount ?? 0) > 0;
+
+  // Affiliate attribution + this event's commission — only for affiliates-viewers
+  // (sales/accounting/admin/super-admin); ops never see it. The picker source is
+  // fetched only when the viewer can actually edit attribution.
+  let affiliateSummary: EventAffiliateSummary | null = null;
+  let affiliateOptions: Option[] = [];
+  if (canViewAffiliates) {
+    [affiliateSummary, affiliateOptions] = await Promise.all([
+      getEventAffiliateSummary(ev.id),
+      canEditAffiliates ? listAffiliateOptions() : Promise.resolve<Option[]>([]),
+    ]);
+  }
 
   return (
     <>
@@ -275,6 +295,15 @@ export default async function EventDetailPage({
 
         {showBilling && (
           <EventBillingPanel invoices={eventInvoices} canBill={canBill} />
+        )}
+
+        {canViewAffiliates && affiliateSummary && (
+          <EventAffiliatePanel
+            eventId={ev.id}
+            summary={affiliateSummary}
+            affiliateOptions={affiliateOptions}
+            canEdit={canEditAffiliates}
+          />
         )}
 
         <InventoryPanel

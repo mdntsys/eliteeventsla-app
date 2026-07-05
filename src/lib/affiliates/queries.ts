@@ -6,7 +6,10 @@ import type {
   AffiliateEarnings,
   AffiliatePayout,
   AffiliateRow,
+  AffiliateStatus,
   CommissionRow,
+  EventAffiliateSummary,
+  EventCommissionRow,
   Option,
 } from "@/lib/affiliates/types";
 
@@ -189,4 +192,102 @@ export async function getAffiliateEarnings(
   owed = round2(owed);
   paid = round2(paid);
   return { earned: round2(owed + paid), paid, owed, accruedCount };
+}
+
+// --- Event attribution ------------------------------------------------------
+
+/**
+ * An event's affiliate attribution (name/status/default rate), its effective +
+ * override commission rate, and this event's commissions rolled up by status —
+ * the data behind the event hub's "Affiliate & commission" panel. Runs under the
+ * caller's RLS: only staff with affiliates-view resolve the affiliate + its
+ * commissions (the panel is gated on the same permission).
+ */
+export async function getEventAffiliateSummary(
+  eventId: string,
+): Promise<EventAffiliateSummary> {
+  const supabase = await createClient();
+
+  const { data: evRow, error: evErr } = await supabase
+    .from("events")
+    .select("affiliate_id, commission_rate_override")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (evErr) throw new Error(evErr.message);
+  const ev = (evRow ?? null) as {
+    affiliate_id: string | null;
+    commission_rate_override: number | null;
+  } | null;
+
+  const affiliateId = ev?.affiliate_id ?? null;
+  const overrideRate = ev?.commission_rate_override ?? null;
+
+  let affiliateName: string | null = null;
+  let affiliateStatus: AffiliateStatus | null = null;
+  let defaultRate: number | null = null;
+
+  if (affiliateId) {
+    const { data: affRow, error: affErr } = await supabase
+      .from("affiliates")
+      .select(
+        "commission_rate, status, profiles!affiliates_profile_id_fkey(full_name)",
+      )
+      .eq("id", affiliateId)
+      .maybeSingle();
+    if (affErr) throw new Error(affErr.message);
+    const aff = affRow as unknown as {
+      commission_rate: number;
+      status: AffiliateStatus;
+      profiles: { full_name: string | null } | null;
+    } | null;
+    if (aff) {
+      affiliateName = aff.profiles?.full_name ?? null;
+      affiliateStatus = aff.status;
+      defaultRate = aff.commission_rate;
+    }
+  }
+
+  const effectiveRate = affiliateId ? (overrideRate ?? defaultRate) : null;
+
+  const { data: comData, error: comErr } = await supabase
+    .from("affiliate_commissions")
+    .select("id, amount, rate, status, invoices(invoice_number)")
+    .eq("event_id", eventId)
+    .order("earned_at", { ascending: false });
+  if (comErr) throw new Error(comErr.message);
+
+  let accrued = 0;
+  let paid = 0;
+  let reversed = 0;
+  const rows: EventCommissionRow[] = (comData ?? []).map((c) => {
+    const { invoices, ...rest } = c as typeof c & {
+      invoices: { invoice_number: string | null } | null;
+    };
+    const amount = rest.amount ?? 0;
+    if (rest.status === "accrued") accrued += amount;
+    else if (rest.status === "paid") paid += amount;
+    else if (rest.status === "reversed") reversed += amount;
+    return {
+      id: rest.id,
+      invoice_number: invoices?.invoice_number ?? null,
+      amount,
+      rate: rest.rate ?? 0,
+      status: rest.status,
+    };
+  });
+
+  return {
+    affiliateId,
+    affiliateName,
+    affiliateStatus,
+    defaultRate,
+    overrideRate,
+    effectiveRate,
+    commission: {
+      accrued: round2(accrued),
+      paid: round2(paid),
+      reversed: round2(reversed),
+      rows,
+    },
+  };
 }

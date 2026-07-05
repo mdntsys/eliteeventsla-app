@@ -10,7 +10,8 @@ import { getUser, requireEdit } from "@/lib/auth/dal";
 import { sendEmail } from "@/lib/email/send";
 import { affiliateWelcomeEmail } from "@/lib/email/templates";
 import { createAffiliateContract } from "@/lib/documents/actions";
-import { optionalText, optionalDate } from "@/lib/forms/coercions";
+import { resyncEventAffiliateCommissions } from "@/lib/accounting/reconcile";
+import { optionalText, optionalDate, optionalUuid } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/affiliates/types";
 
 /**
@@ -292,5 +293,110 @@ export async function recordPayout(
   return {
     success: true,
     notice: `Recorded a $${total.toFixed(2)} payout covering ${rows.length} commission${rows.length === 1 ? "" : "s"}.`,
+  };
+}
+
+const UpdateEventAttributionSchema = z.object({
+  event_id: z.uuid("An event is required."),
+  // Empty clears attribution (event is no longer sourced by any affiliate).
+  affiliate_id: optionalUuid,
+  // Optional per-event rate override, in percent. Empty → use the affiliate's
+  // own rate. Reuses the pct→fraction conversion below.
+  commission_pct_override: z.preprocess(
+    (v) => (typeof v === "string" ? v : ""),
+    z
+      .string()
+      .transform((v) => v.trim())
+      .refine(
+        (v) => {
+          if (v === "") return true;
+          const n = Number(v);
+          return Number.isFinite(n) && n >= 0 && n <= 100;
+        },
+        { message: "Override must be between 0 and 100%." },
+      )
+      .transform((v) => (v === "" ? null : Number(v))),
+  ),
+});
+
+/**
+ * Attribute an event to an affiliate (or clear it) and optionally override the
+ * commission rate for just this event. This is the one UI that writes the
+ * event's affiliate_id + commission_rate_override that the payment reconciler
+ * (lib/accounting/reconcile.ts) already consumes.
+ *
+ * Gated on affiliates-edit (sales/accounting/admin/super-admin) — a commercial
+ * concern, NOT events-edit (which ops holds; ops must not touch commission
+ * money). Because 'accounting' can edit affiliates but not events at the RLS
+ * layer, the event write goes through the SERVICE-ROLE client: a permission-
+ * gated system write, mirroring the payment/commission cascade. Changing
+ * attribution re-syncs this event's outstanding (unpaid) commissions so owed
+ * totals stay correct immediately; already-paid commissions are left for manual
+ * clawback.
+ */
+export async function updateEventAttribution(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("affiliates");
+
+  const parsed = UpdateEventAttributionSchema.safeParse({
+    event_id: formData.get("event_id"),
+    affiliate_id: formData.get("affiliate_id"),
+    commission_pct_override: formData.get("commission_pct_override"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { event_id, affiliate_id, commission_pct_override } = parsed.data;
+
+  // An override is meaningless without an attributed affiliate — drop it when
+  // attribution is cleared so a stale rate can't linger on the row.
+  const override =
+    affiliate_id && commission_pct_override != null
+      ? pctToRate(commission_pct_override)
+      : null;
+
+  let service: ReturnType<typeof createServiceClient>;
+  try {
+    service = createServiceClient();
+  } catch {
+    return {
+      error: "Add SUPABASE_SERVICE_ROLE_KEY to update event attribution.",
+    };
+  }
+
+  // Capture the prior affiliate so their detail page refreshes too when
+  // attribution moves away from them.
+  const { data: prevRow } = await service
+    .from("events")
+    .select("affiliate_id")
+    .eq("id", event_id)
+    .maybeSingle();
+  const prevAffiliateId =
+    (prevRow as { affiliate_id: string | null } | null)?.affiliate_id ?? null;
+
+  const { error } = await service
+    .from("events")
+    .update({ affiliate_id, commission_rate_override: override })
+    .eq("id", event_id);
+  if (error) return { error: error.message };
+
+  // Re-sync outstanding commissions to the new affiliate/rate (or reverse them
+  // if attribution was cleared). Paid commissions are untouched.
+  await resyncEventAffiliateCommissions(service, event_id);
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath("/affiliates");
+  for (const aid of new Set(
+    [affiliate_id, prevAffiliateId].filter((v): v is string => Boolean(v)),
+  )) {
+    revalidatePath(`/affiliates/${aid}`);
+  }
+
+  return {
+    success: true,
+    notice: affiliate_id
+      ? "Event attribution updated."
+      : "Removed this event's affiliate attribution.",
   };
 }
