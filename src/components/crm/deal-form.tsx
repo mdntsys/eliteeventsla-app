@@ -28,12 +28,14 @@ export function DealForm({
   companies,
   stages,
   admins,
+  affiliates,
 }: {
   deal?: Deal;
   contacts: Option[];
   companies: Option[];
   stages: Option[];
   admins: Option[];
+  affiliates: Option[];
 }) {
   const editing = Boolean(deal);
   const [open, setOpen] = useState(false);
@@ -162,6 +164,22 @@ export function DealForm({
             defaultValue={deal?.follow_up_date ?? ""}
             className={FIELD}
           />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Referred by (affiliate)</span>
+          <select
+            name="affiliate_id"
+            defaultValue={deal?.affiliate_id ?? ""}
+            className={FIELD}
+          >
+            <option value="">None</option>
+            {affiliates.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <label className="flex flex-col gap-1.5">

@@ -195,6 +195,27 @@ export function invoiceVoidedEmail(p: {
   };
 }
 
+export function affiliateWelcomeEmail(p: {
+  fullName?: string | null;
+  email: string;
+  tempPassword: string;
+  signInUrl: string;
+  commissionPct: number;
+}): RenderedEmail {
+  const hi = p.fullName ? `Hi ${p.fullName},` : "Hello,";
+  const button = `<a href="${p.signInUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:11px 20px;border-radius:10px;font-weight:600;font-size:14px;">Sign in to your partner portal</a>`;
+  const html = layout("Welcome to the Elite Events LA partner program", `
+    <p ${P}>${hi}</p>
+    <p ${P}>You've been set up as a referral partner with Elite Events LA. Your commission rate is <strong>${p.commissionPct}%</strong> of the revenue we collect on sales you refer.</p>
+    <p ${P}>Sign in to your partner portal to review your commissions, event history, and payouts:</p>
+    <p ${META}>Email: <strong>${p.email}</strong></p>
+    <p ${META}>Temporary password: <strong>${p.tempPassword}</strong></p>
+    <p style="margin:18px 0;">${button}</p>
+    <p ${P}>On your first sign-in you'll be asked to review and sign your commission agreement before the portal unlocks. For your security, please change your password right after signing in.</p>`);
+  const text = `${hi}\n\nYou've been set up as a referral partner with Elite Events LA. Your commission rate is ${p.commissionPct}% of the revenue we collect on sales you refer.\n\nSign in to your partner portal: ${p.signInUrl}\nEmail: ${p.email}\nTemporary password: ${p.tempPassword}\n\nOn your first sign-in you'll review and sign your commission agreement before the portal unlocks. Please change your password after signing in.`;
+  return { subject: "Your Elite Events LA partner account", html, text };
+}
+
 export function welcomeEmail(p: {
   fullName?: string | null;
   email: string;

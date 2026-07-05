@@ -10,6 +10,7 @@ import {
   listStaffOptions,
   listAdminOptions,
 } from "@/lib/crm/queries";
+import { listAffiliateOptions } from "@/lib/affiliates/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
 import { DealForm } from "@/components/crm/deal-form";
@@ -71,14 +72,16 @@ export default async function DealDetailPage({
   await requireView("crm");
   const { id } = await params;
 
-  const [deal, contacts, companies, stages, staff, admins] = await Promise.all([
-    getDeal(id),
-    listContactOptions(),
-    listCompanyOptions(),
-    listPipelineStages(),
-    listStaffOptions(),
-    listAdminOptions(),
-  ]);
+  const [deal, contacts, companies, stages, staff, admins, affiliates] =
+    await Promise.all([
+      getDeal(id),
+      listContactOptions(),
+      listCompanyOptions(),
+      listPipelineStages(),
+      listStaffOptions(),
+      listAdminOptions(),
+      listAffiliateOptions(),
+    ]);
 
   if (!deal) notFound();
 
@@ -170,6 +173,7 @@ export default async function DealDetailPage({
             companies={companies}
             stages={stageOptions}
             admins={admins}
+            affiliates={affiliates}
           />
         </section>
 

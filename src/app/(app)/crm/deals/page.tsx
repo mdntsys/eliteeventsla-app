@@ -7,6 +7,7 @@ import {
   listPipelineStages,
   listAdminOptions,
 } from "@/lib/crm/queries";
+import { listAffiliateOptions } from "@/lib/affiliates/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { DealForm } from "@/components/crm/deal-form";
 import { DealsList } from "@/components/crm/deals-list";
@@ -16,13 +17,15 @@ export const metadata: Metadata = { title: "Deals" };
 export default async function DealsPage() {
   await requireView("crm");
 
-  const [deals, contacts, companies, stages, admins] = await Promise.all([
-    listDeals(),
-    listContactOptions(),
-    listCompanyOptions(),
-    listPipelineStages(),
-    listAdminOptions(),
-  ]);
+  const [deals, contacts, companies, stages, admins, affiliates] =
+    await Promise.all([
+      listDeals(),
+      listContactOptions(),
+      listCompanyOptions(),
+      listPipelineStages(),
+      listAdminOptions(),
+      listAffiliateOptions(),
+    ]);
 
   const stageOptions = stages.map((s) => ({ id: s.id, label: s.name }));
 
@@ -38,6 +41,7 @@ export default async function DealsPage() {
             companies={companies}
             stages={stageOptions}
             admins={admins}
+            affiliates={affiliates}
           />
         }
       />

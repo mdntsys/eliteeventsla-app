@@ -108,6 +108,83 @@ export type Database = {
           },
         ]
       }
+      affiliate_private: {
+        Row: {
+          affiliate_id: string
+          created_at: string
+          ein: string | null
+          updated_at: string
+        }
+        Insert: {
+          affiliate_id: string
+          created_at?: string
+          ein?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affiliate_id?: string
+          created_at?: string
+          ein?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_private_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: true
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliates: {
+        Row: {
+          commission_rate: number
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          profile_id: string
+          status: Database["public"]["Enums"]["affiliate_status"]
+          updated_at: string
+        }
+        Insert: {
+          commission_rate?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          profile_id: string
+          status?: Database["public"]["Enums"]["affiliate_status"]
+          updated_at?: string
+        }
+        Update: {
+          commission_rate?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          profile_id?: string
+          status?: Database["public"]["Enums"]["affiliate_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliates_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliates_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address_line1: string | null
@@ -293,6 +370,7 @@ export type Database = {
       }
       deals: {
         Row: {
+          affiliate_id: string | null
           company_id: string | null
           contact_id: string | null
           created_at: string
@@ -311,6 +389,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          affiliate_id?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -329,6 +408,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          affiliate_id?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -347,6 +427,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "deals_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deals_company_id_fkey"
             columns: ["company_id"]
@@ -570,6 +657,7 @@ export type Database = {
         Row: {
           actual_end_at: string | null
           actual_start_at: string | null
+          affiliate_id: string | null
           company_id: string | null
           contact_id: string | null
           created_at: string
@@ -593,6 +681,7 @@ export type Database = {
         Insert: {
           actual_end_at?: string | null
           actual_start_at?: string | null
+          affiliate_id?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -616,6 +705,7 @@ export type Database = {
         Update: {
           actual_end_at?: string | null
           actual_start_at?: string | null
+          affiliate_id?: string | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -637,6 +727,13 @@ export type Database = {
           venue_name?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "events_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "events_company_id_fkey"
             columns: ["company_id"]
@@ -1793,6 +1890,7 @@ export type Database = {
     Functions: {
       can_edit_module: { Args: { m: string }; Returns: boolean }
       can_view_module: { Args: { m: string }; Returns: boolean }
+      current_affiliate_id: { Args: never; Returns: string }
       current_app_role: {
         Args: never
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1807,6 +1905,7 @@ export type Database = {
     }
     Enums: {
       activity_type: "call" | "email" | "meeting" | "note" | "task"
+      affiliate_status: "active" | "inactive"
       app_role: "admin" | "sales" | "ops" | "accounting" | "affiliate"
       attachment_kind: "return_proof" | "delivery_proof" | "other"
       deal_status: "open" | "won" | "lost"
@@ -1995,6 +2094,7 @@ export const Constants = {
   public: {
     Enums: {
       activity_type: ["call", "email", "meeting", "note", "task"],
+      affiliate_status: ["active", "inactive"],
       app_role: ["admin", "sales", "ops", "accounting", "affiliate"],
       attachment_kind: ["return_proof", "delivery_proof", "other"],
       deal_status: ["open", "won", "lost"],

@@ -89,6 +89,7 @@ const dealFields = {
     .transform((v) => (v === "" ? null : v)),
   source: optionalText,
   owner_id: optionalUuid,
+  affiliate_id: optionalUuid,
   notes: optionalText,
 };
 
@@ -155,6 +156,7 @@ export async function createContact(
     company_id: formData.get("company_id"),
     source: formData.get("source"),
     owner_id: formData.get("owner_id"),
+    affiliate_id: formData.get("affiliate_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -205,6 +207,7 @@ export async function updateContact(
     company_id: formData.get("company_id"),
     source: formData.get("source"),
     owner_id: formData.get("owner_id"),
+    affiliate_id: formData.get("affiliate_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -440,6 +443,7 @@ export async function createDeal(
     event_type: formData.get("event_type") ?? "",
     source: formData.get("source"),
     owner_id: formData.get("owner_id"),
+    affiliate_id: formData.get("affiliate_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -464,6 +468,7 @@ export async function createDeal(
       event_type: data.event_type,
       source: data.source,
       owner_id: data.owner_id,
+      affiliate_id: data.affiliate_id,
       notes: data.notes,
       status,
       created_by: user?.id ?? null,
@@ -499,6 +504,7 @@ export async function updateDeal(
     event_type: formData.get("event_type") ?? "",
     source: formData.get("source"),
     owner_id: formData.get("owner_id"),
+    affiliate_id: formData.get("affiliate_id"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
@@ -517,6 +523,7 @@ export async function updateDeal(
     event_type: data.event_type,
     source: data.source,
     owner_id: data.owner_id,
+    affiliate_id: data.affiliate_id,
     notes: data.notes,
     updated_at: new Date().toISOString(),
   };
@@ -608,7 +615,7 @@ export async function convertDealToEvent(
   const { data: deal, error: dealError } = await supabase
     .from("deals")
     .select(
-      "id, title, contact_id, company_id, event_type, expected_event_date, estimated_value, owner_id",
+      "id, title, contact_id, company_id, event_type, expected_event_date, estimated_value, owner_id, affiliate_id",
     )
     .eq("id", deal_id)
     .maybeSingle();
@@ -639,6 +646,7 @@ export async function convertDealToEvent(
       status: "draft",
       deal_id: deal.id,
       owner_id: deal.owner_id ?? user?.id ?? null,
+      affiliate_id: deal.affiliate_id,
       created_by: user?.id ?? null,
     })
     .select("id")

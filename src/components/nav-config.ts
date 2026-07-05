@@ -54,6 +54,12 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Affiliates",
+    items: [
+      { label: "Affiliates", href: "/affiliates", area: "affiliates" },
+    ],
+  },
+  {
     label: "Admin",
     superAdminOnly: true,
     items: [{ label: "Team", href: "/admin/team", area: "dashboard" }],
