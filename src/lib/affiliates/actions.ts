@@ -221,10 +221,13 @@ const RecordPayoutSchema = z.object({
 });
 
 /**
- * Record a payout covering ALL of an affiliate's currently-accrued commissions:
- * insert a payout row for their sum and mark those commissions 'paid' (linked to
- * the payout). No funds move — this is the ledger of what was paid. The status
- * guard on the update makes it safe against a concurrent double-submit.
+ * Record a payout for an affiliate: insert a payout row and mark the covered
+ * commissions 'paid' (linked to the payout). No funds move — this is the ledger
+ * of what was paid. Covers ALL currently-accrued commissions by default, or just
+ * the ones whose ids are passed via `commission_ids` (selective payout). The
+ * status guard on the mark-paid update makes it safe against a concurrent
+ * double-submit. HARD-BLOCKS unless the affiliate has a W-9 on file — the
+ * commission agreement requires one before any payout.
  */
 export async function recordPayout(
   _prev: ActionState,
@@ -244,16 +247,47 @@ export async function recordPayout(
   const { affiliate_id, method, reference, paid_at, notes } = parsed.data;
   const supabase = await createClient();
 
-  const { data: accrued, error: readErr } = await supabase
+  // W-9 gate. The non-sensitive w9_on_file flag is readable here; the document
+  // itself stays super-admin-only.
+  const { data: affRow, error: affErr } = await supabase
+    .from("affiliates")
+    .select("w9_on_file")
+    .eq("id", affiliate_id)
+    .maybeSingle();
+  if (affErr) return { error: affErr.message };
+  if (!affRow) return { error: "Affiliate not found." };
+  if (!(affRow as { w9_on_file: boolean }).w9_on_file) {
+    return {
+      error:
+        "No W-9 on file for this affiliate — the agreement requires one before any payout. A super-admin can add it on the affiliate's page.",
+    };
+  }
+
+  // Optional selection: pay only these commission ids. Absent/empty → pay all.
+  const selectedIds = formData
+    .getAll("commission_ids")
+    .map(String)
+    .filter(Boolean);
+
+  let accruedQuery = supabase
     .from("affiliate_commissions")
     .select("id, amount")
     .eq("affiliate_id", affiliate_id)
     .eq("status", "accrued");
+  if (selectedIds.length > 0) {
+    accruedQuery = accruedQuery.in("id", selectedIds);
+  }
+  const { data: accrued, error: readErr } = await accruedQuery;
   if (readErr) return { error: readErr.message };
 
   const rows = accrued ?? [];
   if (rows.length === 0) {
-    return { error: "This affiliate has no accrued commissions to pay out." };
+    return {
+      error:
+        selectedIds.length > 0
+          ? "None of the selected commissions are still awaiting payout."
+          : "This affiliate has no accrued commissions to pay out.",
+    };
   }
   const total = round2(rows.reduce((sum, r) => sum + (r.amount ?? 0), 0));
   const user = await getUser();
@@ -293,6 +327,55 @@ export async function recordPayout(
   return {
     success: true,
     notice: `Recorded a $${total.toFixed(2)} payout covering ${rows.length} commission${rows.length === 1 ? "" : "s"}.`,
+  };
+}
+
+const VoidPayoutSchema = z.object({
+  payout_id: z.uuid("A payout is required."),
+  affiliate_id: z.uuid("An affiliate is required."),
+});
+
+/**
+ * Void a recorded payout: return its commissions to 'accrued' (owed again) and
+ * mark the payout row voided_at — kept for audit, excluded from paid totals and
+ * the 1099 report. Undoes a mistaken or reversed payout without deleting history.
+ */
+export async function voidPayout(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("affiliates");
+
+  const parsed = VoidPayoutSchema.safeParse({
+    payout_id: formData.get("payout_id"),
+    affiliate_id: formData.get("affiliate_id"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+  const { payout_id, affiliate_id } = parsed.data;
+
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+
+  // Return the covered commissions to accrued before marking the payout void, so
+  // an interrupted call never leaves a voided payout still owning 'paid' rows.
+  const { error: relErr } = await supabase
+    .from("affiliate_commissions")
+    .update({ status: "accrued", payout_id: null, updated_at: now })
+    .eq("payout_id", payout_id)
+    .eq("status", "paid");
+  if (relErr) return { error: relErr.message };
+
+  const { error: voidErr } = await supabase
+    .from("affiliate_payouts")
+    .update({ voided_at: now, updated_at: now })
+    .eq("id", payout_id)
+    .is("voided_at", null);
+  if (voidErr) return { error: voidErr.message };
+
+  revalidatePath(`/affiliates/${affiliate_id}`);
+  return {
+    success: true,
+    notice: "Payout voided — its commissions are owed again.",
   };
 }
 

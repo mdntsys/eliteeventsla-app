@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { requireView } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import {
   getAffiliate,
   getAffiliateEarnings,
@@ -13,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { AffiliateEditForm } from "@/components/affiliates/affiliate-edit-form";
 import { AffiliateTaxPanel } from "@/components/affiliates/affiliate-tax-panel";
 import { RecordPayoutButton } from "@/components/affiliates/record-payout-button";
+import { VoidPayoutButton } from "@/components/affiliates/void-payout-button";
 
 export const metadata: Metadata = { title: "Affiliate" };
 
@@ -94,8 +96,19 @@ export default async function AffiliateDetailPage({
     listAffiliatePayouts(id),
   ]);
 
+  const canEditAffiliates = canEdit(profile, "affiliates");
+
   // EIN + W-9 are super-admin-only (read via service role) — fetch only then.
   const taxInfo = profile.is_super_admin ? await getAffiliateTaxInfo(id) : null;
+
+  // The accrued (unpaid) commissions offered for a (possibly partial) payout.
+  const accruedCommissions = commissions
+    .filter((c) => c.status === "accrued")
+    .map((c) => ({
+      id: c.id,
+      label: c.event_title ?? c.invoice_number ?? "Commission",
+      amount: c.amount ?? 0,
+    }));
 
   return (
     <>
@@ -108,8 +121,9 @@ export default async function AffiliateDetailPage({
             <AffiliateEditForm affiliate={affiliate} />
             <RecordPayoutButton
               affiliateId={affiliate.id}
-              owed={earnings.owed}
               accruedCount={earnings.accruedCount}
+              w9OnFile={affiliate.w9_on_file}
+              accruedCommissions={accruedCommissions}
             />
           </div>
         }
@@ -249,25 +263,46 @@ export default async function AffiliateDetailPage({
                       <th className="px-4 py-3 font-medium text-muted">
                         Reference
                       </th>
+                      <th className="px-4 py-3" />
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line">
-                    {payouts.map((p) => (
-                      <tr key={p.id} className="align-top">
-                        <td className="px-4 py-3 text-ink">
-                          {formatDate(p.paid_at)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-ink tabular-nums">
-                          {formatMoney(p.amount)}
-                        </td>
-                        <td className="px-4 py-3 text-muted">
-                          {p.method ? (METHOD_LABELS[p.method] ?? p.method) : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-muted">
-                          {p.reference ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    {payouts.map((p) => {
+                      const voided = Boolean(p.voided_at);
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`align-top ${voided ? "text-muted" : ""}`}
+                        >
+                          <td className="px-4 py-3">{formatDate(p.paid_at)}</td>
+                          <td
+                            className={`px-4 py-3 text-right tabular-nums ${voided ? "text-muted line-through" : "text-ink"}`}
+                          >
+                            {formatMoney(p.amount)}
+                          </td>
+                          <td className="px-4 py-3 text-muted">
+                            {p.method
+                              ? (METHOD_LABELS[p.method] ?? p.method)
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-muted">
+                            {p.reference ?? "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {voided ? (
+                              <span className="rounded-full bg-line/60 px-2 py-0.5 text-xs text-muted">
+                                Voided
+                              </span>
+                            ) : canEditAffiliates ? (
+                              <VoidPayoutButton
+                                payoutId={p.id}
+                                affiliateId={affiliate.id}
+                              />
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

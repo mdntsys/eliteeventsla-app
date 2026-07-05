@@ -15,7 +15,11 @@ const METHOD_LABELS: Record<string, string> = {
 
 export default async function PortalPayoutsPage() {
   const { affiliate } = await requirePortalAccess();
-  const rows = await listAffiliatePayouts(affiliate.id);
+  // A voided payout is reversed accounting, not a real payment — hide it from
+  // the partner's view (their owed balance already reflects the reversal).
+  const rows = (await listAffiliatePayouts(affiliate.id)).filter(
+    (p) => !p.voided_at,
+  );
 
   return (
     <>
