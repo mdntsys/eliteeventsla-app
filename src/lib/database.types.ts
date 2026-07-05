@@ -194,6 +194,7 @@ export type Database = {
           paid_at: string
           reference: string | null
           updated_at: string
+          voided_at: string | null
         }
         Insert: {
           affiliate_id: string
@@ -206,6 +207,7 @@ export type Database = {
           paid_at?: string
           reference?: string | null
           updated_at?: string
+          voided_at?: string | null
         }
         Update: {
           affiliate_id?: string
@@ -218,6 +220,7 @@ export type Database = {
           paid_at?: string
           reference?: string | null
           updated_at?: string
+          voided_at?: string | null
         }
         Relationships: [
           {
@@ -242,18 +245,27 @@ export type Database = {
           created_at: string
           ein: string | null
           updated_at: string
+          w9_filename: string | null
+          w9_path: string | null
+          w9_uploaded_at: string | null
         }
         Insert: {
           affiliate_id: string
           created_at?: string
           ein?: string | null
           updated_at?: string
+          w9_filename?: string | null
+          w9_path?: string | null
+          w9_uploaded_at?: string | null
         }
         Update: {
           affiliate_id?: string
           created_at?: string
           ein?: string | null
           updated_at?: string
+          w9_filename?: string | null
+          w9_path?: string | null
+          w9_uploaded_at?: string | null
         }
         Relationships: [
           {
@@ -275,6 +287,7 @@ export type Database = {
           profile_id: string
           status: Database["public"]["Enums"]["affiliate_status"]
           updated_at: string
+          w9_on_file: boolean
         }
         Insert: {
           commission_rate?: number
@@ -285,6 +298,7 @@ export type Database = {
           profile_id: string
           status?: Database["public"]["Enums"]["affiliate_status"]
           updated_at?: string
+          w9_on_file?: boolean
         }
         Update: {
           commission_rate?: number
@@ -295,6 +309,7 @@ export type Database = {
           profile_id?: string
           status?: Database["public"]["Enums"]["affiliate_status"]
           updated_at?: string
+          w9_on_file?: boolean
         }
         Relationships: [
           {

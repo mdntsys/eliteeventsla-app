@@ -6,7 +6,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getUser, requireEdit } from "@/lib/auth/dal";
+import { getUser, requireEdit, requireSuperAdmin } from "@/lib/auth/dal";
 import { sendEmail } from "@/lib/email/send";
 import { affiliateWelcomeEmail } from "@/lib/email/templates";
 import { createAffiliateContract } from "@/lib/documents/actions";
@@ -294,6 +294,186 @@ export async function recordPayout(
     success: true,
     notice: `Recorded a $${total.toFixed(2)} payout covering ${rows.length} commission${rows.length === 1 ? "" : "s"}.`,
   };
+}
+
+// --- Tax / compliance (super-admin only) ------------------------------------
+
+const UpdateAffiliateTaxSchema = z.object({
+  affiliate_id: z.uuid("An affiliate is required."),
+  ein: optionalText,
+});
+
+/**
+ * Set/clear an affiliate's EIN in the isolated, super-admin-only affiliate_private
+ * store (written via the service-role client so it is never exposed to ordinary
+ * staff or the portal). Leaves any W-9 metadata on the row untouched.
+ */
+export async function updateAffiliateTax(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSuperAdmin();
+
+  const parsed = UpdateAffiliateTaxSchema.safeParse({
+    affiliate_id: formData.get("affiliate_id"),
+    ein: formData.get("ein"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+  const { affiliate_id, ein } = parsed.data;
+
+  let service: ReturnType<typeof createServiceClient>;
+  try {
+    service = createServiceClient();
+  } catch {
+    return { error: "Add SUPABASE_SERVICE_ROLE_KEY to manage tax details." };
+  }
+
+  const { error } = await service
+    .from("affiliate_private")
+    .upsert(
+      { affiliate_id, ein, updated_at: new Date().toISOString() },
+      { onConflict: "affiliate_id" },
+    );
+  if (error) return { error: error.message };
+
+  revalidatePath(`/affiliates/${affiliate_id}`);
+  return { success: true, notice: "Tax details updated." };
+}
+
+const W9_TYPES: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+};
+
+/**
+ * Store an affiliate's completed IRS Form W-9. Super-admin only. The file goes to
+ * the isolated private `affiliate-tax` bucket via the service-role client (the
+ * bucket has NO authenticated policy, so it's unreadable by anyone else), its
+ * metadata to affiliate_private, and the non-sensitive `w9_on_file` flag on
+ * affiliates flips true so staff + the payout gate can see a W-9 exists without
+ * reading it. The agreement requires a W-9 before any payout.
+ */
+export async function uploadW9(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSuperAdmin();
+
+  const affiliateId = String(formData.get("affiliate_id") ?? "");
+  if (!z.uuid().safeParse(affiliateId).success) {
+    return { error: "An affiliate is required." };
+  }
+
+  const file = formData.get("w9");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a W-9 file to upload." };
+  }
+  const ext = W9_TYPES[file.type];
+  if (!ext) return { error: "Upload a PDF, PNG, or JPEG." };
+  if (file.size > 10 * 1024 * 1024) {
+    return { error: "File must be under 10 MB." };
+  }
+
+  let service: ReturnType<typeof createServiceClient>;
+  try {
+    service = createServiceClient();
+  } catch {
+    return { error: "Add SUPABASE_SERVICE_ROLE_KEY to store a W-9." };
+  }
+
+  // Note the prior file so a format change (w9.pdf → w9.png) doesn't orphan it.
+  const { data: prior } = await service
+    .from("affiliate_private")
+    .select("w9_path")
+    .eq("affiliate_id", affiliateId)
+    .maybeSingle();
+  const priorPath = (prior as { w9_path: string | null } | null)?.w9_path ?? null;
+
+  const path = `${affiliateId}/w9.${ext}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const { error: upErr } = await service.storage
+    .from("affiliate-tax")
+    .upload(path, buffer, { contentType: file.type, upsert: true });
+  if (upErr) return { error: upErr.message };
+
+  if (priorPath && priorPath !== path) {
+    await service.storage.from("affiliate-tax").remove([priorPath]);
+  }
+
+  const now = new Date().toISOString();
+  const { error: privErr } = await service
+    .from("affiliate_private")
+    .upsert(
+      {
+        affiliate_id: affiliateId,
+        w9_path: path,
+        w9_filename: file.name,
+        w9_uploaded_at: now,
+        updated_at: now,
+      },
+      { onConflict: "affiliate_id" },
+    );
+  if (privErr) return { error: privErr.message };
+
+  await service
+    .from("affiliates")
+    .update({ w9_on_file: true, updated_at: now })
+    .eq("id", affiliateId);
+
+  revalidatePath(`/affiliates/${affiliateId}`);
+  revalidatePath("/affiliates");
+  return { success: true, notice: "W-9 saved." };
+}
+
+/** Remove an affiliate's W-9 (file + metadata) and clear the on-file flag. Super-admin only. */
+export async function removeW9(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireSuperAdmin();
+
+  const affiliateId = String(formData.get("affiliate_id") ?? "");
+  if (!z.uuid().safeParse(affiliateId).success) {
+    return { error: "An affiliate is required." };
+  }
+
+  let service: ReturnType<typeof createServiceClient>;
+  try {
+    service = createServiceClient();
+  } catch {
+    return { error: "Add SUPABASE_SERVICE_ROLE_KEY to manage a W-9." };
+  }
+
+  const { data: row } = await service
+    .from("affiliate_private")
+    .select("w9_path")
+    .eq("affiliate_id", affiliateId)
+    .maybeSingle();
+  const path = (row as { w9_path: string | null } | null)?.w9_path ?? null;
+  if (path) {
+    await service.storage.from("affiliate-tax").remove([path]);
+  }
+
+  const now = new Date().toISOString();
+  await service
+    .from("affiliate_private")
+    .update({
+      w9_path: null,
+      w9_filename: null,
+      w9_uploaded_at: null,
+      updated_at: now,
+    })
+    .eq("affiliate_id", affiliateId);
+
+  await service
+    .from("affiliates")
+    .update({ w9_on_file: false, updated_at: now })
+    .eq("id", affiliateId);
+
+  revalidatePath(`/affiliates/${affiliateId}`);
+  revalidatePath("/affiliates");
+  return { success: true, notice: "W-9 removed." };
 }
 
 const UpdateEventAttributionSchema = z.object({

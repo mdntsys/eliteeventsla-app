@@ -53,6 +53,33 @@ export type EventCommissionRow = {
 };
 
 /**
+ * Super-admin-only tax / compliance info for an affiliate: the EIN (from the
+ * isolated affiliate_private store) + W-9 document metadata and a fresh
+ * short-lived signed URL to the file. Never exposed to the portal or staff below
+ * super-admin.
+ */
+export type AffiliateTaxInfo = {
+  ein: string | null;
+  w9OnFile: boolean;
+  w9Filename: string | null;
+  w9UploadedAt: string | null;
+  /** Short-lived signed URL to the W-9 file (service-role), or null. */
+  w9Url: string | null;
+};
+
+/** One affiliate's 1099 line — cash actually paid to them in a calendar year. */
+export type Affiliate1099Row = {
+  affiliateId: string;
+  name: string | null;
+  email: string | null;
+  /** Sum of non-voided payouts with paid_at in the year (dollars). */
+  paidTotal: number;
+  payoutCount: number;
+  w9OnFile: boolean;
+  status: AffiliateStatus;
+};
+
+/**
  * An event's affiliate attribution + this event's commission rollup — the data
  * behind the event hub's "Affiliate & commission" panel. All rates are stored
  * fractions (0–1); all amounts are dollars.

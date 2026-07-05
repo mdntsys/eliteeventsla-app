@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { requireView } from "@/lib/auth/dal";
 import { listAffiliates } from "@/lib/affiliates/queries";
 import { PageHeader } from "@/components/ui/page-header";
@@ -18,7 +19,17 @@ export default async function AffiliatesPage() {
         eyebrow="Partners"
         title="Affiliates"
         description="Referral partners and their commission rates. Creating an affiliate provisions their portal login and emails a welcome."
-        action={<AffiliateForm />}
+        action={
+          <div className="flex items-center gap-3">
+            <Link
+              href="/affiliates/tax"
+              className="rounded-(--radius-card) border border-line px-4 py-2 text-sm text-muted transition hover:border-navy hover:text-navy"
+            >
+              1099 report
+            </Link>
+            <AffiliateForm />
+          </div>
+        }
       />
 
       <AffiliatesList affiliates={affiliates} />

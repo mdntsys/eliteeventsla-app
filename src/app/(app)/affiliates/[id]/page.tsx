@@ -5,11 +5,13 @@ import { requireView } from "@/lib/auth/dal";
 import {
   getAffiliate,
   getAffiliateEarnings,
+  getAffiliateTaxInfo,
   listAffiliateCommissions,
   listAffiliatePayouts,
 } from "@/lib/affiliates/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { AffiliateEditForm } from "@/components/affiliates/affiliate-edit-form";
+import { AffiliateTaxPanel } from "@/components/affiliates/affiliate-tax-panel";
 import { RecordPayoutButton } from "@/components/affiliates/record-payout-button";
 
 export const metadata: Metadata = { title: "Affiliate" };
@@ -80,7 +82,7 @@ export default async function AffiliateDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireView("affiliates");
+  const profile = await requireView("affiliates");
   const { id } = await params;
 
   const affiliate = await getAffiliate(id);
@@ -91,6 +93,9 @@ export default async function AffiliateDetailPage({
     listAffiliateCommissions(id),
     listAffiliatePayouts(id),
   ]);
+
+  // EIN + W-9 are super-admin-only (read via service role) — fetch only then.
+  const taxInfo = profile.is_super_admin ? await getAffiliateTaxInfo(id) : null;
 
   return (
     <>
@@ -118,6 +123,13 @@ export default async function AffiliateDetailPage({
             <Field label="Commission rate">
               {formatPct(affiliate.commission_rate)}
             </Field>
+            <Field label="W-9">
+              {affiliate.w9_on_file ? (
+                <span className="text-emerald-700">On file</span>
+              ) : (
+                <span className="text-amber-700">Not on file</span>
+              )}
+            </Field>
           </div>
           {affiliate.notes && (
             <div className="mt-6 border-t border-line pt-5">
@@ -134,6 +146,10 @@ export default async function AffiliateDetailPage({
           <Stat label="Paid out" value={formatMoney(earnings.paid)} />
           <Stat label="Lifetime" value={formatMoney(earnings.earned)} />
         </div>
+
+        {taxInfo && (
+          <AffiliateTaxPanel affiliateId={affiliate.id} taxInfo={taxInfo} />
+        )}
 
         {/* Commissions */}
         <section className="flex flex-col gap-3">

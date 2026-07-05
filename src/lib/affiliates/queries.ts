@@ -1,12 +1,15 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import type {
   Affiliate,
+  Affiliate1099Row,
   AffiliateEarnings,
   AffiliatePayout,
   AffiliateRow,
   AffiliateStatus,
+  AffiliateTaxInfo,
   CommissionRow,
   EventAffiliateSummary,
   EventCommissionRow,
@@ -144,6 +147,109 @@ export async function listAffiliateCommissions(
       invoice_number: invoices?.invoice_number ?? null,
     };
   });
+}
+
+// --- Tax / compliance (super-admin) -----------------------------------------
+
+/**
+ * An affiliate's EIN + W-9 metadata (with a fresh short-lived signed URL to the
+ * file). Reads the isolated affiliate_private store + the private affiliate-tax
+ * bucket via the SERVICE-ROLE client — so callers MUST gate on requireSuperAdmin
+ * first (the affiliate detail page renders this only for super-admins). Never
+ * call from the portal or a non-super-admin surface.
+ */
+export async function getAffiliateTaxInfo(
+  affiliateId: string,
+): Promise<AffiliateTaxInfo> {
+  const service = createServiceClient();
+
+  const { data } = await service
+    .from("affiliate_private")
+    .select("ein, w9_path, w9_filename, w9_uploaded_at")
+    .eq("affiliate_id", affiliateId)
+    .maybeSingle();
+  const row = data as {
+    ein: string | null;
+    w9_path: string | null;
+    w9_filename: string | null;
+    w9_uploaded_at: string | null;
+  } | null;
+
+  let w9Url: string | null = null;
+  if (row?.w9_path) {
+    const { data: signed } = await service.storage
+      .from("affiliate-tax")
+      .createSignedUrl(row.w9_path, 600);
+    w9Url = signed?.signedUrl ?? null;
+  }
+
+  return {
+    ein: row?.ein ?? null,
+    w9OnFile: Boolean(row?.w9_path),
+    w9Filename: row?.w9_filename ?? null,
+    w9UploadedAt: row?.w9_uploaded_at ?? null,
+    w9Url,
+  };
+}
+
+/**
+ * The 1099 report for a calendar year: each affiliate paid during the year with
+ * their total cash paid (non-voided payouts, by paid_at), payout count, W-9
+ * status, and account status — sorted highest-paid first. Runs under the caller's
+ * RLS (affiliates-view). Affiliates never paid in the year are omitted.
+ */
+export async function list1099Report(year: number): Promise<Affiliate1099Row[]> {
+  const supabase = await createClient();
+  const start = `${year}-01-01T00:00:00.000Z`;
+  const end = `${year + 1}-01-01T00:00:00.000Z`;
+
+  const { data: payouts, error } = await supabase
+    .from("affiliate_payouts")
+    .select("affiliate_id, amount, paid_at, voided_at")
+    .gte("paid_at", start)
+    .lt("paid_at", end)
+    .is("voided_at", null);
+  if (error) throw new Error(error.message);
+
+  const totals = new Map<string, { total: number; count: number }>();
+  for (const p of payouts ?? []) {
+    const acc = totals.get(p.affiliate_id) ?? { total: 0, count: 0 };
+    acc.total += p.amount ?? 0;
+    acc.count += 1;
+    totals.set(p.affiliate_id, acc);
+  }
+
+  const ids = Array.from(totals.keys());
+  if (ids.length === 0) return [];
+
+  const { data: affs, error: aErr } = await supabase
+    .from("affiliates")
+    .select(
+      "id, status, w9_on_file, profiles!affiliates_profile_id_fkey(full_name, email)",
+    )
+    .in("id", ids);
+  if (aErr) throw new Error(aErr.message);
+
+  const rows: Affiliate1099Row[] = (affs ?? []).map((a) => {
+    const row = a as unknown as {
+      id: string;
+      status: AffiliateStatus;
+      w9_on_file: boolean;
+      profiles: { full_name: string | null; email: string | null } | null;
+    };
+    const t = totals.get(row.id) ?? { total: 0, count: 0 };
+    return {
+      affiliateId: row.id,
+      name: row.profiles?.full_name ?? null,
+      email: row.profiles?.email ?? null,
+      paidTotal: round2(t.total),
+      payoutCount: t.count,
+      w9OnFile: row.w9_on_file,
+      status: row.status,
+    };
+  });
+
+  return rows.sort((x, y) => y.paidTotal - x.paidTotal);
 }
 
 /** An affiliate's recorded payouts, newest first. */
