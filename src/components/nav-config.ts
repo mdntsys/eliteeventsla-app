@@ -57,6 +57,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Affiliates",
     items: [
       { label: "Affiliates", href: "/affiliates", area: "affiliates" },
+      { label: "Documents", href: "/documents", area: "documents" },
     ],
   },
   {

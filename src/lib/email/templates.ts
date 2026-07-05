@@ -195,6 +195,23 @@ export function invoiceVoidedEmail(p: {
   };
 }
 
+export function signatureRequestEmail(p: {
+  recipientName?: string | null;
+  documentTitle: string;
+  signUrl: string;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const button = `<a href="${p.signUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;">Review &amp; sign →</a>`;
+  const html = layout("A document is ready for your signature", `
+    <p ${P}>${hi}</p>
+    <p ${P}><strong>${p.documentTitle}</strong> is ready for your electronic signature. It only takes a moment — open it, review, and click to sign.</p>
+    <p style="margin:20px 0;">${button}</p>
+    <p ${META}>Or paste this link into your browser:<br><a href="${p.signUrl}" style="color:${NAVY};word-break:break-all;">${p.signUrl}</a></p>
+    <p ${P}>Thank you.</p>`);
+  const text = `${hi}\n\n${p.documentTitle} is ready for your electronic signature. Review & sign:\n${p.signUrl}\n\nThank you.`;
+  return { subject: `Please sign: ${p.documentTitle}`, html, text };
+}
+
 export function affiliateWelcomeEmail(p: {
   fullName?: string | null;
   email: string;

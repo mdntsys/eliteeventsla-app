@@ -63,6 +63,7 @@ export const AREAS = [
   "servicing",
   "accounting",
   "affiliates",
+  "documents",
 ] as const;
 export type Area = (typeof AREAS)[number];
 
@@ -77,6 +78,7 @@ export const AREA_LABELS: Record<Area, string> = {
   servicing: "Servicing",
   accounting: "Accounting",
   affiliates: "Affiliates",
+  documents: "Documents",
 };
 
 /** A single area's effective permission. */
@@ -104,6 +106,7 @@ export const ROLE_AREA_DEFAULTS: Record<
     servicing: { view: true, edit: true },
     accounting: { view: true, edit: true },
     affiliates: { view: true, edit: true },
+    documents: { view: true, edit: true },
   },
   sales: {
     dashboard: { view: true, edit: false },
@@ -111,6 +114,7 @@ export const ROLE_AREA_DEFAULTS: Record<
     quotes: { view: true, edit: true },
     events: { view: true, edit: true },
     affiliates: { view: true, edit: true },
+    documents: { view: true, edit: true },
   },
   ops: {
     dashboard: { view: true, edit: false },
@@ -125,6 +129,7 @@ export const ROLE_AREA_DEFAULTS: Record<
     accounting: { view: true, edit: true },
     events: { view: true, edit: false },
     affiliates: { view: true, edit: true },
+    documents: { view: true, edit: true },
   },
   // Affiliates have NO internal-area access — they live entirely in the separate
   // affiliate portal, scoped to their own data by row-ownership RLS.

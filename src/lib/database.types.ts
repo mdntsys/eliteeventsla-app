@@ -599,6 +599,161 @@ export type Database = {
           },
         ]
       }
+      document_audit: {
+        Row: {
+          actor: string | null
+          at: string
+          document_id: string
+          event: string
+          id: string
+          ip: string | null
+          meta: Json
+          user_agent: string | null
+        }
+        Insert: {
+          actor?: string | null
+          at?: string
+          document_id: string
+          event: string
+          id?: string
+          ip?: string | null
+          meta?: Json
+          user_agent?: string | null
+        }
+        Update: {
+          actor?: string | null
+          at?: string
+          document_id?: string
+          event?: string
+          id?: string
+          ip?: string | null
+          meta?: Json
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_audit_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          affiliate_id: string | null
+          company_id: string | null
+          contact_id: string | null
+          content_hash: string | null
+          created_at: string
+          created_by: string | null
+          event_id: string | null
+          id: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          payload: Json
+          sign_token: string | null
+          signature_name: string | null
+          signed_at: string | null
+          signer_email: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          signer_user_agent: string | null
+          status: Database["public"]["Enums"]["document_status"]
+          storage_path: string | null
+          title: string
+          token_expires_at: string | null
+          updated_at: string
+          viewed_at: string | null
+        }
+        Insert: {
+          affiliate_id?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          event_id?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["document_kind"]
+          payload?: Json
+          sign_token?: string | null
+          signature_name?: string | null
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
+          storage_path?: string | null
+          title: string
+          token_expires_at?: string | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          affiliate_id?: string | null
+          company_id?: string | null
+          contact_id?: string | null
+          content_hash?: string | null
+          created_at?: string
+          created_by?: string | null
+          event_id?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["document_kind"]
+          payload?: Json
+          sign_token?: string | null
+          signature_name?: string | null
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
+          storage_path?: string | null
+          title?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_attachments: {
         Row: {
           caption: string | null
@@ -2041,6 +2196,8 @@ export type Database = {
       attachment_kind: "return_proof" | "delivery_proof" | "other"
       commission_status: "accrued" | "paid" | "reversed"
       deal_status: "open" | "won" | "lost"
+      document_kind: "affiliate_contract" | "customer_sow" | "other"
+      document_status: "draft" | "sent" | "viewed" | "signed" | "voided"
       event_status:
         | "draft"
         | "confirmed"
@@ -2231,6 +2388,8 @@ export const Constants = {
       attachment_kind: ["return_proof", "delivery_proof", "other"],
       commission_status: ["accrued", "paid", "reversed"],
       deal_status: ["open", "won", "lost"],
+      document_kind: ["affiliate_contract", "customer_sow", "other"],
+      document_status: ["draft", "sent", "viewed", "signed", "voided"],
       event_status: [
         "draft",
         "confirmed",

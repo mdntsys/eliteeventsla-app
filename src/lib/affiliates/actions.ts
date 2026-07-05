@@ -9,6 +9,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import { sendEmail } from "@/lib/email/send";
 import { affiliateWelcomeEmail } from "@/lib/email/templates";
+import { createAffiliateContract } from "@/lib/documents/actions";
 import { optionalText, optionalDate } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/affiliates/types";
 
@@ -124,6 +125,9 @@ export async function createAffiliate(
       .from("affiliate_private")
       .insert({ affiliate_id: affiliate.id, ein });
   }
+
+  // Draft their commission agreement so it's ready to sign on first login.
+  await createAffiliateContract(affiliate.id);
 
   // Welcome email (temp password + sign-in link).
   const h = await headers();
