@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { randomUUID, createHash } from "crypto";
 import { z } from "zod";
@@ -14,6 +15,19 @@ import {
   affiliateContractCanonicalText,
   type ContractPayload,
 } from "@/lib/documents/contract";
+import {
+  sowCanonicalText,
+  sowTotal,
+  type SowPayload,
+  type SowScopeItem,
+} from "@/lib/documents/sow";
+import {
+  optionalUuid,
+  optionalText,
+  optionalDate,
+  optionalTimestamp,
+  optionalInt,
+} from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/documents/types";
 
 /**
@@ -223,6 +237,127 @@ export async function prepareMyContractForSigning(): Promise<{
     title: doc.title,
     payload: doc.payload,
   };
+}
+
+const ScopeItemSchema = z.object({
+  description: z.string().trim().min(1),
+  quantity: z.coerce.number().refine((n) => Number.isFinite(n) && n >= 0),
+  amount: z.coerce.number().refine((n) => Number.isFinite(n) && n >= 0),
+});
+
+const CreateSowSchema = z.object({
+  title: z.string().trim().min(1, "A title is required."),
+  event_id: optionalUuid,
+  contact_id: optionalUuid,
+  company_id: optionalUuid,
+  signer_name: optionalText,
+  signer_email: optionalText,
+  event_title: z.string().trim().min(1, "An event title is required."),
+  event_date: optionalDate,
+  start_at: optionalTimestamp,
+  end_at: optionalTimestamp,
+  venue_name: optionalText,
+  guest_count: optionalInt,
+  client_name: optionalText,
+  client_company: optionalText,
+  notes: optionalText,
+});
+
+/**
+ * Create a customer Statement of Work from the builder form. Snapshots the event
+ * details + agreed scope lines into the document payload and redirects to the
+ * new document (where the team sends it for signature).
+ */
+export async function createSow(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("documents");
+
+  const parsed = CreateSowSchema.safeParse({
+    title: formData.get("title"),
+    event_id: formData.get("event_id"),
+    contact_id: formData.get("contact_id"),
+    company_id: formData.get("company_id"),
+    signer_name: formData.get("signer_name"),
+    signer_email: formData.get("signer_email"),
+    event_title: formData.get("event_title"),
+    event_date: formData.get("event_date"),
+    start_at: formData.get("start_at"),
+    end_at: formData.get("end_at"),
+    venue_name: formData.get("venue_name"),
+    guest_count: formData.get("guest_count"),
+    client_name: formData.get("client_name"),
+    client_company: formData.get("client_company"),
+    notes: formData.get("notes"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  let rawItems: unknown;
+  try {
+    rawItems = JSON.parse(String(formData.get("scope_items") ?? "[]"));
+  } catch {
+    return { error: "Could not read the scope items." };
+  }
+  const itemsParsed = z.array(ScopeItemSchema).safeParse(rawItems);
+  if (!itemsParsed.success) {
+    return { error: "Each scope line needs a description, quantity, and amount." };
+  }
+  const items: SowScopeItem[] = itemsParsed.data
+    .filter((i) => i.description.trim() !== "")
+    .map((i) => ({
+      description: i.description.trim(),
+      quantity: i.quantity,
+      amount: Math.round((i.amount + Number.EPSILON) * 100) / 100,
+    }));
+
+  const data = parsed.data;
+  const payload: SowPayload = {
+    companyName: "Elite Events LA",
+    eventTitle: data.event_title,
+    eventDate: data.event_date,
+    startAt: data.start_at,
+    endAt: data.end_at,
+    venueName: data.venue_name,
+    guestCount: data.guest_count,
+    clientName: data.client_name,
+    clientCompany: data.client_company,
+    scopeItems: items,
+    notes: data.notes,
+    total: sowTotal(items),
+  };
+
+  const user = await getUser();
+  const supabase = await createClient();
+  const { data: doc, error } = await supabase
+    .from("documents")
+    .insert({
+      kind: "customer_sow",
+      title: data.title,
+      status: "draft",
+      event_id: data.event_id,
+      contact_id: data.contact_id,
+      company_id: data.company_id,
+      signer_name: data.signer_name,
+      signer_email: data.signer_email,
+      payload,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error || !doc) {
+    return { error: error?.message ?? "Could not create the SOW." };
+  }
+
+  await supabase.from("document_audit").insert({
+    document_id: doc.id,
+    event: "created",
+    actor: user?.email ?? "system",
+  });
+
+  revalidatePath("/documents");
+  // redirect() throws to navigate — keep it outside any try/catch.
+  redirect(`/documents/${doc.id}`);
 }
 
 const IdSchema = z.object({ id: z.uuid("A document is required.") });
@@ -453,9 +588,32 @@ export async function signDocument(
       updates.payload = payload;
       updates.content_hash = contentHash;
       updates.storage_path = storagePath;
+    } else if (doc.kind === "customer_sow") {
+      const payload = doc.payload as SowPayload;
+      const contentHash = createHash("sha256")
+        .update(sowCanonicalText(payload))
+        .digest("hex");
+      const { renderSowPdf } = await import("@/lib/pdf/sow-pdf");
+      const pdf = await renderSowPdf(payload, {
+        documentId: doc.id,
+        name: signatureName,
+        email: doc.signer_email,
+        signedAt,
+        ip,
+        userAgent,
+        contentHash,
+      });
+      const storagePath = `${doc.id}/signed.pdf`;
+      const { error: upErr } = await db.storage
+        .from("documents")
+        .upload(storagePath, pdf, {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (upErr) return { error: "Could not store the signed document." };
+      updates.content_hash = contentHash;
+      updates.storage_path = storagePath;
     } else {
-      // Other kinds (customer SOW is rendered in a later phase): still capture a
-      // fingerprint of the exact payload signed.
       updates.content_hash = createHash("sha256")
         .update(JSON.stringify(doc.payload ?? {}))
         .digest("hex");

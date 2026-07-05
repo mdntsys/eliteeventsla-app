@@ -300,6 +300,25 @@ export default async function EventDetailPage({
 
         <ReturnsPanel ev={ev} />
 
+        {canEdit(profile, "documents") && (
+          <section className="rounded-(--radius-card) border border-line bg-card p-6">
+            <p className="eyebrow">Documents</p>
+            <h2 className="font-display mt-0.5 text-xl font-light text-navy">
+              Statement of Work
+            </h2>
+            <p className="mt-1 mb-4 max-w-prose text-sm text-muted">
+              Build an SOW seeded from this event&rsquo;s details and billed
+              scope, then send it to the client to sign.
+            </p>
+            <Link
+              href={`/documents/new?event=${ev.id}`}
+              className="rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90"
+            >
+              Create SOW
+            </Link>
+          </section>
+        )}
+
         {canEditEvents && (
           <section className="rounded-(--radius-card) border border-red-200 bg-red-50/40 p-6">
             <p className="eyebrow text-red-700">Danger zone</p>

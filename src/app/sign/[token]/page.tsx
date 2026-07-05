@@ -6,7 +6,8 @@ import {
   affiliateContractClauses,
   type ContractPayload,
 } from "@/lib/documents/contract";
-import { formatDate } from "@/lib/accounting/format";
+import type { SowPayload } from "@/lib/documents/sow";
+import { formatDate, formatMoney } from "@/lib/accounting/format";
 import { COMPANY } from "@/lib/company";
 import { SignForm } from "@/components/documents/sign-form";
 
@@ -61,6 +62,8 @@ export default async function PublicSignPage({
             <>
               {doc.kind === "affiliate_contract" ? (
                 <ContractView payload={doc.payload as ContractPayload} />
+              ) : doc.kind === "customer_sow" ? (
+                <SowView payload={doc.payload as SowPayload} />
               ) : (
                 <OtherView payload={doc.payload} />
               )}
@@ -106,6 +109,85 @@ function ContractView({ payload }: { payload: ContractPayload }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+function SowView({ payload }: { payload: SowPayload }) {
+  const client =
+    [payload.clientName, payload.clientCompany].filter(Boolean).join(" · ") ||
+    "—";
+  return (
+    <>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <dt className="eyebrow">Event</dt>
+          <dd className="mt-1 text-sm text-ink">{payload.eventTitle}</dd>
+        </div>
+        <div>
+          <dt className="eyebrow">Date</dt>
+          <dd className="mt-1 text-sm text-ink">
+            {formatDate(payload.eventDate)}
+          </dd>
+        </div>
+        <div>
+          <dt className="eyebrow">Venue</dt>
+          <dd className="mt-1 text-sm text-ink">{payload.venueName ?? "—"}</dd>
+        </div>
+        <div>
+          <dt className="eyebrow">Client</dt>
+          <dd className="mt-1 text-sm text-ink">{client}</dd>
+        </div>
+        <div>
+          <dt className="eyebrow">Guests</dt>
+          <dd className="mt-1 text-sm text-ink">{payload.guestCount ?? "—"}</dd>
+        </div>
+      </dl>
+
+      <p className="eyebrow mt-6">Scope of work</p>
+      <div className="mt-2 overflow-x-auto rounded-(--radius-card) border border-line">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-muted">
+              <th className="px-4 py-2 font-medium">Description</th>
+              <th className="px-4 py-2 text-right font-medium">Qty</th>
+              <th className="px-4 py-2 text-right font-medium">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {payload.scopeItems.map((item, i) => (
+              <tr key={i} className="border-b border-line last:border-0">
+                <td className="px-4 py-2 text-ink">{item.description}</td>
+                <td className="px-4 py-2 text-right text-ink">
+                  {item.quantity}
+                </td>
+                <td className="px-4 py-2 text-right text-ink">
+                  {formatMoney(item.amount)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-line font-medium text-navy">
+              <td className="px-4 py-2" colSpan={2}>
+                Total
+              </td>
+              <td className="px-4 py-2 text-right">
+                {formatMoney(payload.total)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {payload.notes ? (
+        <div className="mt-6">
+          <p className="eyebrow">Notes</p>
+          <p className="mt-1 whitespace-pre-line text-sm text-ink">
+            {payload.notes}
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }
