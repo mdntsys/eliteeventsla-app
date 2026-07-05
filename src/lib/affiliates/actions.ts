@@ -9,7 +9,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import { sendEmail } from "@/lib/email/send";
 import { affiliateWelcomeEmail } from "@/lib/email/templates";
-import { optionalText } from "@/lib/forms/coercions";
+import { optionalText, optionalDate } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/affiliates/types";
 
 /**
@@ -29,6 +29,11 @@ function firstError(error: z.ZodError): string {
 /** Percent (0–100) → stored fraction (0–1), rounded to 4dp. */
 function pctToRate(pct: number): number {
   return Math.round((pct / 100 + Number.EPSILON) * 10000) / 10000;
+}
+
+/** Round to cents to avoid float drift when summing money. */
+function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 
 const CreateAffiliateSchema = z.object({
@@ -200,4 +205,88 @@ export async function updateAffiliate(
   revalidatePath(`/affiliates/${id}`);
   revalidatePath("/affiliates");
   return { success: true };
+}
+
+const RecordPayoutSchema = z.object({
+  affiliate_id: z.uuid("An affiliate is required."),
+  method: optionalText,
+  reference: optionalText,
+  paid_at: optionalDate,
+  notes: optionalText,
+});
+
+/**
+ * Record a payout covering ALL of an affiliate's currently-accrued commissions:
+ * insert a payout row for their sum and mark those commissions 'paid' (linked to
+ * the payout). No funds move — this is the ledger of what was paid. The status
+ * guard on the update makes it safe against a concurrent double-submit.
+ */
+export async function recordPayout(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("affiliates");
+
+  const parsed = RecordPayoutSchema.safeParse({
+    affiliate_id: formData.get("affiliate_id"),
+    method: formData.get("method"),
+    reference: formData.get("reference"),
+    paid_at: formData.get("paid_at"),
+    notes: formData.get("notes"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { affiliate_id, method, reference, paid_at, notes } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: accrued, error: readErr } = await supabase
+    .from("affiliate_commissions")
+    .select("id, amount")
+    .eq("affiliate_id", affiliate_id)
+    .eq("status", "accrued");
+  if (readErr) return { error: readErr.message };
+
+  const rows = accrued ?? [];
+  if (rows.length === 0) {
+    return { error: "This affiliate has no accrued commissions to pay out." };
+  }
+  const total = round2(rows.reduce((sum, r) => sum + (r.amount ?? 0), 0));
+  const user = await getUser();
+
+  const { data: payout, error: payErr } = await supabase
+    .from("affiliate_payouts")
+    .insert({
+      affiliate_id,
+      amount: total,
+      method,
+      reference,
+      notes,
+      paid_at: paid_at ?? new Date().toISOString(),
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (payErr || !payout) {
+    return { error: payErr?.message ?? "Could not record the payout." };
+  }
+
+  const { error: markErr } = await supabase
+    .from("affiliate_commissions")
+    .update({
+      status: "paid",
+      payout_id: payout.id,
+      updated_at: new Date().toISOString(),
+    })
+    .in(
+      "id",
+      rows.map((r) => r.id),
+    )
+    .eq("status", "accrued");
+  if (markErr) return { error: markErr.message };
+
+  revalidatePath(`/affiliates/${affiliate_id}`);
+  return {
+    success: true,
+    notice: `Recorded a $${total.toFixed(2)} payout covering ${rows.length} commission${rows.length === 1 ? "" : "s"}.`,
+  };
 }

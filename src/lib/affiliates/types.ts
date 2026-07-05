@@ -19,3 +19,26 @@ export type AffiliateRow = Affiliate & {
   email: string | null;
   phone: string | null;
 };
+
+export type AffiliateCommission = Tables["affiliate_commissions"]["Row"];
+export type AffiliatePayout = Tables["affiliate_payouts"]["Row"];
+export type CommissionStatus =
+  Database["public"]["Enums"]["commission_status"];
+
+/** A commission joined to its event title + invoice number, for display. */
+export type CommissionRow = AffiliateCommission & {
+  event_title: string | null;
+  invoice_number: string | null;
+};
+
+/** Rolled-up commission totals for an affiliate (all in dollars). */
+export type AffiliateEarnings = {
+  /** Lifetime earned (accrued + paid; reversed excluded). */
+  earned: number;
+  /** Already paid out. */
+  paid: number;
+  /** Accrued but not yet paid (what's owed). */
+  owed: number;
+  /** How many commissions are currently accrued/unpaid. */
+  accruedCount: number;
+};

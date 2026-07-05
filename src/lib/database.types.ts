@@ -108,6 +108,134 @@ export type Database = {
           },
         ]
       }
+      affiliate_commissions: {
+        Row: {
+          affiliate_id: string
+          amount: number
+          basis_amount: number
+          created_at: string
+          earned_at: string
+          event_id: string | null
+          id: string
+          invoice_id: string
+          payout_id: string | null
+          rate: number
+          status: Database["public"]["Enums"]["commission_status"]
+          updated_at: string
+        }
+        Insert: {
+          affiliate_id: string
+          amount?: number
+          basis_amount?: number
+          created_at?: string
+          earned_at?: string
+          event_id?: string | null
+          id?: string
+          invoice_id: string
+          payout_id?: string | null
+          rate?: number
+          status?: Database["public"]["Enums"]["commission_status"]
+          updated_at?: string
+        }
+        Update: {
+          affiliate_id?: string
+          amount?: number
+          basis_amount?: number
+          created_at?: string
+          earned_at?: string
+          event_id?: string | null
+          id?: string
+          invoice_id?: string
+          payout_id?: string | null
+          rate?: number
+          status?: Database["public"]["Enums"]["commission_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_commissions_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_commissions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_commissions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: true
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_commissions_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_payouts: {
+        Row: {
+          affiliate_id: string
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          method: string | null
+          notes: string | null
+          paid_at: string
+          reference: string | null
+          updated_at: string
+        }
+        Insert: {
+          affiliate_id: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          reference?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affiliate_id?: string
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          method?: string | null
+          notes?: string | null
+          paid_at?: string
+          reference?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_payouts_affiliate_id_fkey"
+            columns: ["affiliate_id"]
+            isOneToOne: false
+            referencedRelation: "affiliates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_payouts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       affiliate_private: {
         Row: {
           affiliate_id: string
@@ -658,6 +786,7 @@ export type Database = {
           actual_end_at: string | null
           actual_start_at: string | null
           affiliate_id: string | null
+          commission_rate_override: number | null
           company_id: string | null
           contact_id: string | null
           created_at: string
@@ -682,6 +811,7 @@ export type Database = {
           actual_end_at?: string | null
           actual_start_at?: string | null
           affiliate_id?: string | null
+          commission_rate_override?: number | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -706,6 +836,7 @@ export type Database = {
           actual_end_at?: string | null
           actual_start_at?: string | null
           affiliate_id?: string | null
+          commission_rate_override?: number | null
           company_id?: string | null
           contact_id?: string | null
           created_at?: string
@@ -1908,6 +2039,7 @@ export type Database = {
       affiliate_status: "active" | "inactive"
       app_role: "admin" | "sales" | "ops" | "accounting" | "affiliate"
       attachment_kind: "return_proof" | "delivery_proof" | "other"
+      commission_status: "accrued" | "paid" | "reversed"
       deal_status: "open" | "won" | "lost"
       event_status:
         | "draft"
@@ -2097,6 +2229,7 @@ export const Constants = {
       affiliate_status: ["active", "inactive"],
       app_role: ["admin", "sales", "ops", "accounting", "affiliate"],
       attachment_kind: ["return_proof", "delivery_proof", "other"],
+      commission_status: ["accrued", "paid", "reversed"],
       deal_status: ["open", "won", "lost"],
       event_status: [
         "draft",
