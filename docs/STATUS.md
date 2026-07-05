@@ -23,17 +23,18 @@ Repo: `git@github.com:mdntsys/eliteeventsla-app.git`, branch `main`. Stack + con
 | **Accounting** | `/accounting`, `/accounting/invoices` (+ `[id]`), `/accounting/payments`; client-facing `/i/[token]` (+ `/api/invoice/[token]/{pdf,checkout}`) | ✅ Invoices (line items, statuses, balances) + payments (record + reconcile) + overview. **Client invoice delivery**: every invoice has an unguessable `public_token` → a branded, itemized **public page `/i/<token>`** (no login) that pays by **Stripe Checkout** (card) or shows global **Zelle/wire/check** instructions, plus a generated **PDF** (`@react-pdf/renderer`). "Send invoice to client" emails the link + PDF via Resend. **Stripe LIVE**: signed webhook reconciles Checkout *and* legacy payment links (match by session/link id) → invoice paid **+ event activated (draft→confirmed)**; refunds downgrade. Shared: `reconcile.ts`, `src/lib/invoices/public.ts`, `src/lib/pdf/invoice-pdf.tsx`. |
 | **Emails (Resend)** | _infra, no route_ | ✅ Branded templates + guarded send helper (no-ops without key) wired to booking-confirmed / vendor-request / crew-assignment / return-receipt. |
 | **Admin** | `/admin/team` | ✅ User + role management (admin only). |
-| **Affiliates** | `/affiliates` (+ `[id]`) | ✅ Referral partners: provisioning (service-role login + welcome email), per-affiliate commission rate + status, isolated EIN store, commissions + payout ledger (owed/paid), and **per-event attribution + commission override on the event hub**. Commission accrues on the pre-tax subtotal when an attributed invoice is fully paid; reverses on refund/un-attribution. |
+| **Affiliates** | `/affiliates` (+ `[id]`, `/tax`) | ✅ Referral partners: provisioning (service-role login + welcome email), per-affiliate commission rate + status, **per-event attribution + commission override on the event hub**. Commission accrues on the pre-tax subtotal when an attributed invoice is fully paid; reverses on refund/un-attribution; the affiliate is emailed. **Payouts**: selective (pick which commissions) + voidable ledger, **hard-gated on a W-9 being on file**; the affiliate is emailed. **Tax (super-admin only)**: isolated EIN + W-9 store (private `affiliate-tax` bucket, service-role-only) + a **1099 report** (`/affiliates/tax`, cash paid per year, $600 flag, CSV export). |
 | **Documents / E-sign** | `/documents` (+ `[id]`, `/new`); public `/sign/[token]` | ✅ Central document store + DocuSign-like signing. Affiliate contracts + customer SOWs, consent + audit trail (IP/UA/UTC/SHA-256), executed PDF with a Certificate of Completion, expiring single-use tokens. |
 | **Affiliate portal** | `/portal` (+ `/referrals`, `/payouts`, `/documents`, `/sign`) | ✅ External affiliate portal (own route group + shell, `affiliate` role, zero internal access). First-login contract-signing gate; dashboard, referrals, payouts, signed docs. |
 
 ## Data / schema
-Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0030`** applied (plain SQL in
+Postgres on Supabase (`@supabase/ssr`, cookie sessions). **Migrations `0001`–`0032`** applied (plain SQL in
 `supabase/migrations/`, immutable once applied — add a new file to change schema). RLS on every table, keyed
 on role via `current_app_role()` / `is_admin()` / `has_any_role()` / area helpers `can_view_module()` /
 `can_edit_module()`, plus `current_affiliate_id()` for affiliate row-ownership (all enforce `is_active`).
 Generated types in `src/lib/database.types.ts` (regenerate after any migration). Storage: `operations-proofs`
-(private, return proofs) + `inventory-photos` (public) + `documents` (private, executed PDFs).
+(private, return proofs) + `inventory-photos` (public) + `documents` (private, executed PDFs) + `affiliate-tax`
+(private, W-9s — service-role-only, no authenticated policy).
 
 ## Integrations — all live (secrets in gitignored `.env.local` + Vercel)
 - **Stripe** ✅ LIVE: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` set; webhook destination points at `app.eliteeventsla.com/api/stripe/webhook` (4 events: checkout.session.completed, payment_intent.succeeded, payment_intent.payment_failed, charge.refunded). End-to-end lifecycle verified (19/19 smoke).
