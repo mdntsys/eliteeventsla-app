@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { signDocument } from "@/lib/documents/actions";
 import type { ActionState } from "@/lib/documents/types";
 
@@ -14,9 +15,12 @@ import type { ActionState } from "@/lib/documents/types";
 export function SignForm({
   token,
   signerName,
+  continueHref,
 }: {
   token: string;
   signerName: string | null;
+  /** When set (the affiliate portal), show a link into the app after signing. */
+  continueHref?: string;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     signDocument,
@@ -25,8 +29,16 @@ export function SignForm({
 
   if (state?.success) {
     return (
-      <div className="mt-8 rounded-(--radius-card) border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800">
-        ✓ Signed — thank you. A copy has been recorded.
+      <div className="mt-8 rounded-(--radius-card) border border-green-300 bg-green-50 px-4 py-4 text-sm text-green-800">
+        <p>✓ Signed — thank you. A copy has been recorded.</p>
+        {continueHref && (
+          <Link
+            href={continueHref}
+            className="mt-3 inline-block rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90"
+          >
+            Continue to your portal →
+          </Link>
+        )}
       </div>
     );
   }

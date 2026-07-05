@@ -103,6 +103,128 @@ export async function createAffiliateContract(
   return { id: doc.id };
 }
 
+/**
+ * Prepare the CURRENT affiliate's commission agreement for in-portal signing:
+ * find (or lazily create) their contract document and ensure it has a live
+ * token. Derives the affiliate strictly from the caller's own session (never a
+ * passed id) and runs via the service-role client (an affiliate can't mint a
+ * token on the documents table themselves). Returns null if the caller is not an
+ * affiliate.
+ */
+export async function prepareMyContractForSigning(): Promise<{
+  signed: boolean;
+  documentId: string;
+  token: string | null;
+  title: string;
+  payload: unknown;
+} | null> {
+  const user = await getUser();
+  if (!user) return null;
+
+  let db: ReturnType<typeof createServiceClient>;
+  try {
+    db = createServiceClient();
+  } catch {
+    return null;
+  }
+
+  const { data: affRow } = await db
+    .from("affiliates")
+    .select(
+      "id, commission_rate, profiles!affiliates_profile_id_fkey(full_name, email, phone)",
+    )
+    .eq("profile_id", user.id)
+    .maybeSingle();
+  const aff = affRow as unknown as {
+    id: string;
+    commission_rate: number;
+    profiles: {
+      full_name: string | null;
+      email: string | null;
+      phone: string | null;
+    } | null;
+  } | null;
+  if (!aff) return null;
+
+  const cols =
+    "id, status, title, payload, sign_token, token_expires_at";
+  let { data: doc } = await db
+    .from("documents")
+    .select(cols)
+    .eq("affiliate_id", aff.id)
+    .eq("kind", "affiliate_contract")
+    .neq("status", "voided")
+    .limit(1)
+    .maybeSingle();
+
+  if (!doc) {
+    const payload = buildAffiliateContractPayload({
+      full_name: aff.profiles?.full_name ?? null,
+      email: aff.profiles?.email ?? null,
+      phone: aff.profiles?.phone ?? null,
+      commission_rate: aff.commission_rate,
+    });
+    const { data: created } = await db
+      .from("documents")
+      .insert({
+        kind: "affiliate_contract",
+        title: `${payload.companyName} — Sales Commission Agreement`,
+        status: "draft",
+        affiliate_id: aff.id,
+        signer_name: payload.representativeName,
+        signer_email: payload.email,
+        payload,
+        created_by: user.id,
+      })
+      .select(cols)
+      .single();
+    doc = created;
+    if (doc) {
+      await db
+        .from("document_audit")
+        .insert({ document_id: doc.id, event: "created", actor: user.email ?? "system" });
+    }
+  }
+  if (!doc) return null;
+
+  if (doc.status === "signed") {
+    return {
+      signed: true,
+      documentId: doc.id,
+      token: null,
+      title: doc.title,
+      payload: doc.payload,
+    };
+  }
+
+  let token = doc.sign_token;
+  const expired =
+    !!doc.token_expires_at &&
+    new Date(doc.token_expires_at).getTime() < Date.now();
+  if (!token || expired) {
+    token = newToken();
+    await db
+      .from("documents")
+      .update({
+        sign_token: token,
+        token_expires_at: new Date(
+          Date.now() + TOKEN_TTL_DAYS * 86_400_000,
+        ).toISOString(),
+        status: doc.status === "draft" ? "sent" : doc.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", doc.id);
+  }
+
+  return {
+    signed: false,
+    documentId: doc.id,
+    token,
+    title: doc.title,
+    payload: doc.payload,
+  };
+}
+
 const IdSchema = z.object({ id: z.uuid("A document is required.") });
 
 /**

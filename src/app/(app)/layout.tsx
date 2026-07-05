@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { requireUser, getProfile } from "@/lib/auth/dal";
+import { isAffiliate } from "@/lib/auth/roles";
 import { AppChrome } from "@/components/app-chrome";
 
 /** Centered interstitial for accounts that can't enter the app yet. */
@@ -69,6 +71,12 @@ export default async function AppLayout({
         email={profile.email}
       />
     );
+  }
+
+  // Affiliates are external partners — they live in the separate lightweight
+  // portal (their own commissions/payouts/documents), never the internal app.
+  if (isAffiliate(profile.role)) {
+    redirect("/portal");
   }
 
   // Invited but not yet granted a role. Super admins bypass this — they manage
