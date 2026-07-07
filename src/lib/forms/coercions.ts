@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pacificWallClockToUtcISO } from "@/lib/time";
 
 /**
  * Shared, null-safe form-field coercions for server actions.
@@ -165,6 +166,24 @@ export const optionalDateTime = z.preprocess(
 
 /** Alias of {@link optionalDateTime} (events module naming). */
 export const optionalTimestamp = optionalDateTime;
+
+/**
+ * Empty/absent → null; otherwise a `datetime-local` wall-clock value interpreted
+ * as **Pacific** and stored as a UTC ISO string. Use this (not optionalTimestamp)
+ * for any `<input type="datetime-local">` a user types a local time into —
+ * scheduling stops, follow-up due times, SOW start/end — so 9am Pacific is saved
+ * as 16:00 UTC instead of being mis-stamped as 9am UTC. See {@link pacificWallClockToUtcISO}.
+ */
+export const optionalPacificDateTime = z.preprocess(
+  toStr,
+  z
+    .string()
+    .transform((v) => v.trim())
+    .refine((v) => v === "" || pacificWallClockToUtcISO(v) !== null, {
+      message: "Enter a valid date and time.",
+    })
+    .transform((v) => (v === "" ? null : pacificWallClockToUtcISO(v))),
+);
 
 /** HTML checkbox → boolean ("on"/"true" → true). Already null-safe. */
 export const checkbox = z

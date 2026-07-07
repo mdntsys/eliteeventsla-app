@@ -32,6 +32,7 @@ function formatTime(value: string | null): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
   });
 }
 

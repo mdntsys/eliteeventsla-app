@@ -35,7 +35,11 @@ function formatTimeRange(start: string | null, end: string | null): string {
   const fmt = (v: string) => {
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "America/Los_Angeles",
+    });
   };
   return end ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
 }

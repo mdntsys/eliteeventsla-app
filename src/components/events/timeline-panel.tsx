@@ -73,6 +73,7 @@ function formatRange(start: string | null, end: string | null): string {
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      timeZone: "America/Los_Angeles",
     });
   if (start && end) return `${fmt(start)} – ${fmt(end)}`;
   return fmt((start ?? end) as string);
@@ -225,6 +226,7 @@ function formatOther(start: string | null, end: string | null): string {
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      timeZone: "America/Los_Angeles",
     });
   return end ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
 }

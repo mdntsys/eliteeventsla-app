@@ -63,6 +63,7 @@ function formatTimeRange(start: string | null, end: string | null): string {
     new Date(v).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
+      timeZone: BUSINESS_TZ,
     });
   return end ? `${fmt(start)} – ${fmt(end)}` : fmt(start);
 }

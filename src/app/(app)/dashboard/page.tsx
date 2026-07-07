@@ -48,6 +48,7 @@ function formatDateTime(value: string | null): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
   });
 }
 
@@ -60,6 +61,7 @@ function formatShortDate(value: string | null): string {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
   });
 }
 

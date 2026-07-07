@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { utcToPacificInputValue } from "@/lib/time";
 import type {
   Document,
   DocumentAudit,
@@ -151,8 +152,10 @@ export async function getEventSowDefaults(
     signer_email: ev.contacts?.email ?? "",
     event_title: ev.title,
     event_date: ev.event_date,
-    start_at: ev.start_at,
-    end_at: ev.end_at,
+    // Seed the datetime-local inputs with Pacific wall-clock values so the SOW
+    // start/end pre-fill matches how the team reads the event times.
+    start_at: ev.start_at ? utcToPacificInputValue(ev.start_at) : null,
+    end_at: ev.end_at ? utcToPacificInputValue(ev.end_at) : null,
     venue_name: ev.venue_name,
     guest_count: ev.guest_count,
     client_name: clientName,

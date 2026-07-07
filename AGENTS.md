@@ -53,6 +53,19 @@ deployment, and auth. Do not couple the two — brand tokens were one-time-copie
   applied — add a new migration to change schema); `supabase/seed.sql` holds reference data.
 - After schema changes: regenerate `src/lib/database.types.ts` and run the security advisor.
 
+## Timezone — the business runs on Pacific (`src/lib/time.ts`)
+Everyone using the app is on Pacific (America/Los_Angeles); Supabase stores `timestamptz` in UTC.
+Two rules keep entered times correct (a naive value typed at 9am must not become 9am UTC = 2am PT):
+- **Writing a `datetime-local` value** (a user-typed wall-clock time — scheduling stops, follow-up
+  due times, SOW start/end): validate with **`optionalPacificDateTime`** (`src/lib/forms/coercions.ts`),
+  which interprets it as Pacific and stores the correct UTC instant. **Never** feed a naive
+  datetime-local string to `new Date()` (the prod server is UTC, so it mis-stamps by 7–8h).
+  Pre-fill such inputs from stored UTC via `utcToPacificInputValue`.
+- **Displaying a timestamp**: always format in Pacific — use `formatPacific` or pass
+  `timeZone: "America/Los_Angeles"`. A `toLocale*` call with an `hour`/`minute` option and **no**
+  `timeZone` is a bug (it uses the viewer's zone). Pure DATE columns (`YYYY-MM-DD`) stay
+  `timeZone: "UTC"` to avoid off-by-one drift.
+
 ## Deferred by design — wire up with the relevant feature
 A security/integrity review (see migration `0009`) confirmed two real gaps that are intentionally
 left for the feature pass that adds writers to those tables — they're noise to enforce on empty

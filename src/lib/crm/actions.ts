@@ -9,7 +9,7 @@ import { getUser, getProfile, requireEdit } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
 import {
   optionalDate,
-  optionalDateTime,
+  optionalPacificDateTime,
   optionalEmail,
   optionalMoney,
   optionalText,
@@ -113,7 +113,7 @@ const LogActivitySchema = z
     type: activityTypeEnum.default("note"),
     subject: optionalText,
     body: optionalText,
-    due_at: optionalDateTime,
+    due_at: optionalPacificDateTime,
     assigned_to: optionalUuid,
     contact_id: optionalUuid,
     company_id: optionalUuid,

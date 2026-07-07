@@ -25,7 +25,7 @@ import {
   optionalUuid,
   optionalText,
   optionalDate,
-  optionalTimestamp,
+  optionalPacificDateTime,
   optionalInt,
 } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/documents/types";
@@ -254,8 +254,8 @@ const CreateSowSchema = z.object({
   signer_email: optionalText,
   event_title: z.string().trim().min(1, "An event title is required."),
   event_date: optionalDate,
-  start_at: optionalTimestamp,
-  end_at: optionalTimestamp,
+  start_at: optionalPacificDateTime,
+  end_at: optionalPacificDateTime,
   venue_name: optionalText,
   guest_count: optionalInt,
   client_name: optionalText,

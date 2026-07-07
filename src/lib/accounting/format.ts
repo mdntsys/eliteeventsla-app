@@ -21,7 +21,7 @@ export function formatDate(value: string | null): string {
   });
 }
 
-/** Format a timestamptz column for display (local time). */
+/** Format a timestamptz column for display in Pacific (the business timezone). */
 export function formatDateTime(value: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -32,5 +32,6 @@ export function formatDateTime(value: string | null): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "America/Los_Angeles",
   });
 }

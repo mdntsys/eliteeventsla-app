@@ -16,10 +16,12 @@ import {
   optionalDate,
   optionalInt,
   optionalMoney,
+  optionalPacificDateTime,
   optionalTimestamp,
   optionalText,
   optionalUuid,
 } from "@/lib/forms/coercions";
+import { pacificWallClockToUtcISO } from "@/lib/time";
 
 /**
  * Server actions for the event/job lifecycle. Every action gates with
@@ -106,8 +108,8 @@ const AddScheduleSchema = z
   .object({
     event_id: z.uuid("An event is required."),
     type: scheduleTypeEnum,
-    scheduled_start: optionalTimestamp,
-    scheduled_end: optionalTimestamp,
+    scheduled_start: optionalPacificDateTime,
+    scheduled_end: optionalPacificDateTime,
     address: optionalText,
   })
   // A start time is required so the stop (and its crew) actually appears on the
@@ -1021,11 +1023,18 @@ export async function setActualEventTimes(
   } else if (trimmed === "") {
     ts = null;
   } else {
-    const d = new Date(trimmed);
-    if (Number.isNaN(d.getTime())) {
-      return { error: "Enter a valid date/time." };
+    // A naive datetime-local value is a Pacific wall-clock time; a full ISO
+    // (with Z/offset) passes through unchanged.
+    const pacific = pacificWallClockToUtcISO(trimmed);
+    if (pacific) {
+      ts = pacific;
+    } else {
+      const d = new Date(trimmed);
+      if (Number.isNaN(d.getTime())) {
+        return { error: "Enter a valid date/time." };
+      }
+      ts = d.toISOString();
     }
-    ts = d.toISOString();
   }
 
   const supabase = await createClient();
