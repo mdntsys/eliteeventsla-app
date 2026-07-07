@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { reserveItemForEvent } from "@/lib/inventory/actions";
 import type { AvailableUnitOption } from "@/lib/inventory/types";
 import type { EventOption } from "@/lib/events/types";
@@ -23,11 +24,12 @@ export function ReserveForEventButton({
     id: string;
     name: string;
     kind: "bulk" | "serialized";
-    available_now: number;
+    available: number;
     available_unit_options: AvailableUnitOption[];
   };
   events: EventOption[];
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,8 @@ export function ReserveForEventButton({
         setError(result.error);
       } else {
         close();
+        // Reflect the new reservation in the inventory list right away.
+        router.refresh();
       }
     });
   }
@@ -139,7 +143,7 @@ export function ReserveForEventButton({
                 <span className="text-xs text-muted">
                   Quantity{" "}
                   <span className="text-muted">
-                    ({item.available_now} available now)
+                    ({item.available} available)
                   </span>
                 </span>
                 <input

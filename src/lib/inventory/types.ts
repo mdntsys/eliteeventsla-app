@@ -27,14 +27,15 @@ export type InventoryListRow = InventoryItem & {
   available_units: number;
   open_maintenance: number;
   /**
-   * Units/quantity currently out on a job right now — a reservation whose window
-   * covers today (or anything already checked out) and not yet returned.
+   * Units/quantity reserved (spoken for) to an event — any line not yet returned
+   * that is upcoming, current, or already checked out. Reserving for a future
+   * event counts immediately; a stale past reservation auto-releases.
    */
-  in_use_now: number;
-  /** What's free to allocate right now (available_units/quantity minus in_use_now). */
-  available_now: number;
-  /** Titles of the events this item is committed to right now (for a tooltip). */
-  active_event_titles: string[];
+  reserved_count: number;
+  /** What's free to reserve (available_units/quantity minus reserved_count). */
+  available_count: number;
+  /** Titles of the events this item is reserved to (for a tooltip). */
+  reserved_event_titles: string[];
   /** Serialized units with status 'available', for the reserve picker. */
   available_unit_options: AvailableUnitOption[];
   /** Human label of where the item / its units live (null if unknown). */

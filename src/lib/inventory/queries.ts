@@ -126,10 +126,14 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     }
   }
 
-  // "In use right now" per item: reservations whose window covers this instant
-  // (or anything already checked out), not yet returned. For serialized items we
-  // also track how many of those live lines are still merely reserved (not yet
-  // checked out) so they can be netted off the available-unit count.
+  // What's reserved (spoken for) per item: any line not yet returned that is
+  // either checked out (physically out) or still upcoming/current — i.e. its
+  // reserved window hasn't ended, or it has no end date. This makes reserving an
+  // item for a FUTURE event immediately reduce its availability here, while a
+  // stale past reservation that was never returned auto-releases once its window
+  // ends. For serialized items we track the reserved-but-not-checked-out lines
+  // separately so they can be netted off the available-unit count (checked-out
+  // units already left the available pool via their 'in_use' status).
   const now = Date.now();
   const toMs = (iso: string | null, fallback: number): number => {
     if (!iso) return fallback;
@@ -146,19 +150,17 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     events: { title: string | null } | null;
   };
   const reservations = (reservationsRes.data ?? []) as LiveReservation[];
-  const inUseQty = new Map<string, number>(); // committed units/qty right now
-  const reservedNotOut = new Map<string, number>(); // serialized reserved-but-not-checked-out
-  const activeTitles = new Map<string, Set<string>>();
+  const reservedQty = new Map<string, number>(); // committed units/qty
+  const reservedNotOut = new Map<string, number>(); // reserved but not checked out
+  const reservedTitles = new Map<string, Set<string>>();
   for (const r of reservations) {
-    const activeNow =
-      r.checked_out_at != null ||
-      (now >= toMs(r.reserved_from, -Infinity) &&
-        now <= toMs(r.reserved_to, Infinity));
-    if (!activeNow) continue;
+    const notEnded = r.reserved_to == null || toMs(r.reserved_to, Infinity) >= now;
+    const committed = r.checked_out_at != null || notEnded;
+    if (!committed) continue;
     const qty = r.quantity ?? 1;
-    inUseQty.set(
+    reservedQty.set(
       r.inventory_item_id,
-      (inUseQty.get(r.inventory_item_id) ?? 0) + qty,
+      (reservedQty.get(r.inventory_item_id) ?? 0) + qty,
     );
     if (r.checked_out_at == null) {
       reservedNotOut.set(
@@ -168,9 +170,9 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     }
     const title = r.events?.title;
     if (title) {
-      const set = activeTitles.get(r.inventory_item_id) ?? new Set<string>();
+      const set = reservedTitles.get(r.inventory_item_id) ?? new Set<string>();
       set.add(title);
-      activeTitles.set(r.inventory_item_id, set);
+      reservedTitles.set(r.inventory_item_id, set);
     }
   }
 
@@ -213,24 +215,24 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     const { inventory_categories, ...rest } = item;
     const unitCount = unitCounts.get(item.id) ?? 0;
     const availableUnits = availableCounts.get(item.id) ?? 0;
-    const inUseNow = inUseQty.get(item.id) ?? 0;
-    // Available now: bulk nets the live reservation quantity off the on-hand
+    const reservedCount = reservedQty.get(item.id) ?? 0;
+    // Available to reserve: bulk nets the reserved quantity off the on-hand
     // count; serialized nets only the reserved-not-yet-out lines off the units
     // that are already status='available' (checked-out units are already
     // excluded from availableUnits by their 'in_use' status).
-    const availableNow =
+    const availableCount =
       item.kind === "serialized"
         ? Math.max(0, availableUnits - (reservedNotOut.get(item.id) ?? 0))
-        : Math.max(0, (item.quantity ?? 0) - inUseNow);
+        : Math.max(0, (item.quantity ?? 0) - reservedCount);
     return {
       ...rest,
       category_name: inventory_categories?.name ?? null,
       unit_count: unitCount,
       available_units: availableUnits,
       open_maintenance: openMaintenance.get(item.id) ?? 0,
-      in_use_now: inUseNow,
-      available_now: availableNow,
-      active_event_titles: Array.from(activeTitles.get(item.id) ?? []),
+      reserved_count: reservedCount,
+      available_count: availableCount,
+      reserved_event_titles: Array.from(reservedTitles.get(item.id) ?? []),
       available_unit_options: availableUnitOptions.get(item.id) ?? [],
       location_summary: locationSummaryFor(item),
     };

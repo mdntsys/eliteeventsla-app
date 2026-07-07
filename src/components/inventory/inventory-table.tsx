@@ -26,20 +26,20 @@ function StockCell({ row }: { row: InventoryListRow }) {
   const total = row.kind === "serialized" ? row.unit_count : row.quantity ?? 0;
   return (
     <div className="tabular-nums">
-      <span className="text-ink">{row.available_now}</span>
+      <span className="text-ink">{row.available_count}</span>
       <span className="text-muted">
         /{total} available
       </span>
-      {row.in_use_now > 0 && (
+      {row.reserved_count > 0 && (
         <div
           className="mt-0.5 text-xs font-medium text-amber-700"
           title={
-            row.active_event_titles.length > 0
-              ? `On: ${row.active_event_titles.join(", ")}`
+            row.reserved_event_titles.length > 0
+              ? `On: ${row.reserved_event_titles.join(", ")}`
               : undefined
           }
         >
-          {row.in_use_now} in use now
+          {row.reserved_count} reserved
         </div>
       )}
     </div>
@@ -178,7 +178,7 @@ export function InventoryTable({
                         id: row.id,
                         name: row.name,
                         kind: row.kind,
-                        available_now: row.available_now,
+                        available: row.available_count,
                         available_unit_options: row.available_unit_options,
                       }}
                       events={events}
