@@ -11,6 +11,7 @@ import type { TablesInsert } from "@/lib/database.types";
 import {
   optionalMoney,
   optionalText,
+  optionalTimestamp,
   optionalUuid,
 } from "@/lib/forms/coercions";
 
@@ -99,9 +100,36 @@ const ResolveMaintenanceSchema = z.object({
   item_id: z.uuid("An item is required."),
 });
 
+const ReserveForEventSchema = z.object({
+  event_id: z.uuid("An event is required."),
+  inventory_item_id: z.uuid("An item is required."),
+  unit_id: optionalUuid,
+  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
+  rate: optionalMoney,
+  reserved_from: optionalTimestamp,
+  reserved_to: optionalTimestamp,
+});
+
+const BulkAssignLocationSchema = z.object({
+  item_ids: z.array(z.uuid()).min(1, "Select at least one item."),
+  location_id: optionalUuid,
+  row_id: optionalUuid,
+});
+
+const DeleteItemSchema = z.object({
+  item_id: z.uuid("An item is required."),
+});
+
 /** Pull the first zod issue message for a friendly action error. */
 function firstError(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Please check your input.";
+}
+
+/** The Postgres error code from a Supabase error, if present. */
+function pgCode(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : undefined;
 }
 
 // --- Actions ----------------------------------------------------------------
@@ -633,4 +661,170 @@ export async function importInventoryCsv(
 
   revalidatePath("/operations/inventory");
   return { success: true, created, skipped, skippedExisting, errors };
+}
+
+// --- Reserve for an event (from the inventory tab) --------------------------
+
+/**
+ * Reserve this inventory item for an event, straight from the inventory tab —
+ * the reverse of the event hub's reserve form, writing the same `event_items`
+ * row. Surfaces the double-booking EXCLUDE violation (23P01) as a friendly
+ * message and revalidates both the inventory list and the target event.
+ */
+export async function reserveItemForEvent(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = ReserveForEventSchema.safeParse({
+    event_id: formData.get("event_id"),
+    inventory_item_id: formData.get("inventory_item_id"),
+    unit_id: formData.get("unit_id"),
+    quantity: formData.get("quantity") ?? 1,
+    rate: formData.get("rate"),
+    reserved_from: formData.get("reserved_from"),
+    reserved_to: formData.get("reserved_to"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const data = parsed.data;
+  if (
+    data.reserved_from &&
+    data.reserved_to &&
+    new Date(data.reserved_from).getTime() > new Date(data.reserved_to).getTime()
+  ) {
+    return { error: "The reserved window can't end before it starts." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("event_items").insert({
+    event_id: data.event_id,
+    inventory_item_id: data.inventory_item_id,
+    unit_id: data.unit_id,
+    quantity: data.quantity,
+    rate: data.rate,
+    reserved_from: data.reserved_from,
+    reserved_to: data.reserved_to,
+  });
+
+  if (error) {
+    if (pgCode(error) === "23P01") {
+      return {
+        error: "That unit is already booked for an overlapping window.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/operations/inventory");
+  revalidatePath(`/operations/inventory/${data.inventory_item_id}`);
+  revalidatePath(`/events/${data.event_id}`);
+  return { success: true };
+}
+
+// --- Bulk assign a storage location -----------------------------------------
+
+/**
+ * Set the storage location (and optional warehouse row) on a batch of items at
+ * once — "assign all to Alvy Warehouse / Delia's". Updates each item's default
+ * location AND its serialized units, so the list's location summary reflects the
+ * move for bulk and serialized items alike. An empty location clears it.
+ */
+export async function bulkAssignLocation(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = BulkAssignLocationSchema.safeParse({
+    item_ids: formData.getAll("item_ids").map((v) => String(v)),
+    location_id: formData.get("location_id"),
+    row_id: formData.get("row_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const { error: itemsError } = await supabase
+    .from("inventory_items")
+    .update({ location_id: data.location_id, row_id: data.row_id })
+    .in("id", data.item_ids);
+  if (itemsError) {
+    return { error: itemsError.message };
+  }
+
+  const { error: unitsError } = await supabase
+    .from("inventory_units")
+    .update({ location_id: data.location_id, row_id: data.row_id })
+    .in("item_id", data.item_ids);
+  if (unitsError) {
+    return { error: unitsError.message };
+  }
+
+  revalidatePath("/operations/inventory");
+  return { success: true };
+}
+
+// --- Delete an inventory item (mistake cleanup) -----------------------------
+
+/**
+ * Hard-delete an inventory item that was entered by mistake. This is only safe
+ * for items with NO event reservation history — deleting one that's been used on
+ * jobs would erase that record, so those are protected and should be retired
+ * (status='retired') instead. Serialized units and maintenance rows cascade.
+ */
+export async function deleteInventoryItem(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = DeleteItemSchema.safeParse({
+    item_id: formData.get("item_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const { item_id } = parsed.data;
+  const supabase = await createClient();
+
+  // An item that's ever been reserved on an event carries history worth keeping.
+  const { count, error: countError } = await supabase
+    .from("event_items")
+    .select("id", { count: "exact", head: true })
+    .eq("inventory_item_id", item_id);
+  if (countError) {
+    return { error: countError.message };
+  }
+  if ((count ?? 0) > 0) {
+    return {
+      error:
+        "This item has been used on events, so it can't be deleted. Set its status to “Retired” instead to keep its history.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("inventory_items")
+    .delete()
+    .eq("id", item_id);
+  if (error) {
+    if (pgCode(error) === "23503") {
+      return {
+        error:
+          "This item is still referenced elsewhere, so it can't be deleted. Retire it instead.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/operations/inventory");
+  // redirect() throws to navigate — keep it outside any try/catch.
+  redirect("/operations/inventory");
 }

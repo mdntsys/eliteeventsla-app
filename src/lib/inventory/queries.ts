@@ -53,7 +53,7 @@ export async function listCategories(): Promise<InventoryCategory[]> {
 export async function listInventory(): Promise<InventoryListRow[]> {
   const supabase = await createClient();
 
-  const [itemsRes, unitsRes, maintRes, locationsRes, rowsRes] =
+  const [itemsRes, unitsRes, maintRes, locationsRes, rowsRes, reservationsRes] =
     await Promise.all([
       supabase
         .from("inventory_items")
@@ -61,13 +61,20 @@ export async function listInventory(): Promise<InventoryListRow[]> {
         .order("name", { ascending: true }),
       supabase
         .from("inventory_units")
-        .select("id, item_id, status, location_id, row_id, section"),
+        .select("id, item_id, asset_tag, status, location_id, row_id, section"),
       supabase
         .from("maintenance_records")
         .select("id, item_id, unit_id, status")
         .neq("status", "resolved"),
       supabase.from("locations").select("id, name"),
       supabase.from("warehouse_rows").select("id, label"),
+      // Live reservations, for the "in use right now" snapshot on the list.
+      supabase
+        .from("event_items")
+        .select(
+          "inventory_item_id, unit_id, quantity, reserved_from, reserved_to, checked_out_at, events(title)",
+        )
+        .is("returned_at", null),
     ]);
 
   if (itemsRes.error) throw new Error(itemsRes.error.message);
@@ -75,6 +82,7 @@ export async function listInventory(): Promise<InventoryListRow[]> {
   if (maintRes.error) throw new Error(maintRes.error.message);
   if (locationsRes.error) throw new Error(locationsRes.error.message);
   if (rowsRes.error) throw new Error(rowsRes.error.message);
+  if (reservationsRes.error) throw new Error(reservationsRes.error.message);
 
   type ItemWithCategory = InventoryItem & {
     inventory_categories: { name: string } | null;
@@ -100,9 +108,11 @@ export async function listInventory(): Promise<InventoryListRow[]> {
     unitToItem.set(unit.id, unit.item_id);
   }
 
-  // Per-item unit aggregates.
+  // Per-item unit aggregates + the available serialized units offered in the
+  // "reserve for an event" picker.
   const unitCounts = new Map<string, number>();
   const availableCounts = new Map<string, number>();
+  const availableUnitOptions = new Map<string, { id: string; asset_tag: string | null }[]>();
   for (const unit of units) {
     unitCounts.set(unit.item_id, (unitCounts.get(unit.item_id) ?? 0) + 1);
     if (unit.status === "available") {
@@ -110,6 +120,57 @@ export async function listInventory(): Promise<InventoryListRow[]> {
         unit.item_id,
         (availableCounts.get(unit.item_id) ?? 0) + 1,
       );
+      const opts = availableUnitOptions.get(unit.item_id) ?? [];
+      opts.push({ id: unit.id, asset_tag: unit.asset_tag });
+      availableUnitOptions.set(unit.item_id, opts);
+    }
+  }
+
+  // "In use right now" per item: reservations whose window covers this instant
+  // (or anything already checked out), not yet returned. For serialized items we
+  // also track how many of those live lines are still merely reserved (not yet
+  // checked out) so they can be netted off the available-unit count.
+  const now = Date.now();
+  const toMs = (iso: string | null, fallback: number): number => {
+    if (!iso) return fallback;
+    const t = new Date(iso).getTime();
+    return Number.isNaN(t) ? fallback : t;
+  };
+  type LiveReservation = {
+    inventory_item_id: string;
+    unit_id: string | null;
+    quantity: number | null;
+    reserved_from: string | null;
+    reserved_to: string | null;
+    checked_out_at: string | null;
+    events: { title: string | null } | null;
+  };
+  const reservations = (reservationsRes.data ?? []) as LiveReservation[];
+  const inUseQty = new Map<string, number>(); // committed units/qty right now
+  const reservedNotOut = new Map<string, number>(); // serialized reserved-but-not-checked-out
+  const activeTitles = new Map<string, Set<string>>();
+  for (const r of reservations) {
+    const activeNow =
+      r.checked_out_at != null ||
+      (now >= toMs(r.reserved_from, -Infinity) &&
+        now <= toMs(r.reserved_to, Infinity));
+    if (!activeNow) continue;
+    const qty = r.quantity ?? 1;
+    inUseQty.set(
+      r.inventory_item_id,
+      (inUseQty.get(r.inventory_item_id) ?? 0) + qty,
+    );
+    if (r.checked_out_at == null) {
+      reservedNotOut.set(
+        r.inventory_item_id,
+        (reservedNotOut.get(r.inventory_item_id) ?? 0) + qty,
+      );
+    }
+    const title = r.events?.title;
+    if (title) {
+      const set = activeTitles.get(r.inventory_item_id) ?? new Set<string>();
+      set.add(title);
+      activeTitles.set(r.inventory_item_id, set);
     }
   }
 
@@ -150,12 +211,27 @@ export async function listInventory(): Promise<InventoryListRow[]> {
 
   return items.map((item) => {
     const { inventory_categories, ...rest } = item;
+    const unitCount = unitCounts.get(item.id) ?? 0;
+    const availableUnits = availableCounts.get(item.id) ?? 0;
+    const inUseNow = inUseQty.get(item.id) ?? 0;
+    // Available now: bulk nets the live reservation quantity off the on-hand
+    // count; serialized nets only the reserved-not-yet-out lines off the units
+    // that are already status='available' (checked-out units are already
+    // excluded from availableUnits by their 'in_use' status).
+    const availableNow =
+      item.kind === "serialized"
+        ? Math.max(0, availableUnits - (reservedNotOut.get(item.id) ?? 0))
+        : Math.max(0, (item.quantity ?? 0) - inUseNow);
     return {
       ...rest,
       category_name: inventory_categories?.name ?? null,
-      unit_count: unitCounts.get(item.id) ?? 0,
-      available_units: availableCounts.get(item.id) ?? 0,
+      unit_count: unitCount,
+      available_units: availableUnits,
       open_maintenance: openMaintenance.get(item.id) ?? 0,
+      in_use_now: inUseNow,
+      available_now: availableNow,
+      active_event_titles: Array.from(activeTitles.get(item.id) ?? []),
+      available_unit_options: availableUnitOptions.get(item.id) ?? [],
       location_summary: locationSummaryFor(item),
     };
   });

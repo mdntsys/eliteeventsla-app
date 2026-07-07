@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireView } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { getInventoryItem } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
 import { PageHeader } from "@/components/ui/page-header";
@@ -10,6 +11,7 @@ import { ItemStatusControl } from "@/components/inventory/item-status-control";
 import { ItemLocationForm } from "@/components/inventory/item-location-form";
 import { UnitsPanel } from "@/components/inventory/units-panel";
 import { MaintenancePanel } from "@/components/inventory/maintenance-panel";
+import { DeleteItemButton } from "@/components/inventory/delete-item-button";
 import { ImageUpload } from "@/components/shared/image-upload";
 
 export const metadata: Metadata = { title: "Inventory item" };
@@ -54,7 +56,7 @@ export default async function InventoryItemPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireView("inventory");
+  const profile = await requireView("inventory");
   const { id } = await params;
   const [item, locationOptions] = await Promise.all([
     getInventoryItem(id),
@@ -150,6 +152,22 @@ export default async function InventoryItemPage({
         )}
 
         <MaintenancePanel item={item} />
+
+        {canEdit(profile, "inventory") && (
+          <section className="rounded-(--radius-card) border border-red-200 bg-red-50/40 p-6">
+            <p className="eyebrow text-red-700">Danger zone</p>
+            <h2 className="font-display mt-0.5 text-xl font-light text-navy">
+              Delete this item
+            </h2>
+            <p className="mt-1 mb-4 max-w-prose text-sm text-muted">
+              Only for something entered by mistake — a typo or duplicate. An item
+              that has ever been reserved on an event can&rsquo;t be deleted; set
+              its status to &ldquo;Retired&rdquo; instead to keep its history.
+              Deleting removes the item and its units and can&rsquo;t be undone.
+            </p>
+            <DeleteItemButton itemId={item.id} itemName={item.name} />
+          </section>
+        )}
       </div>
     </>
   );

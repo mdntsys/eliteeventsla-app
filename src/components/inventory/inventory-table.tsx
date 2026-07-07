@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import type { InventoryListRow } from "@/lib/inventory/types";
+import type { EventOption } from "@/lib/events/types";
 import { StatusBadge, KindBadge } from "@/components/inventory/status-badge";
+import { ReserveForEventButton } from "@/components/inventory/reserve-for-event-button";
 
 /**
- * Editorial table of inventory items. Server component — purely presentational
- * over the aggregated InventoryListRow[] shape from the queries layer.
+ * Editorial table of inventory items with row selection (for bulk location
+ * assignment), a live "available now / in use" stock cell, and a per-row
+ * "Reserve for an event" action.
  */
 
 function formatDailyRate(rate: number | null): string {
@@ -18,24 +23,60 @@ function formatDailyRate(rate: number | null): string {
 }
 
 function StockCell({ row }: { row: InventoryListRow }) {
-  if (row.kind === "serialized") {
-    return (
-      <span className="tabular-nums">
-        {row.available_units}/{row.unit_count}{" "}
-        <span className="text-muted">available</span>
+  const total = row.kind === "serialized" ? row.unit_count : row.quantity ?? 0;
+  return (
+    <div className="tabular-nums">
+      <span className="text-ink">{row.available_now}</span>
+      <span className="text-muted">
+        /{total} available
       </span>
-    );
-  }
-  return <span className="tabular-nums">{row.quantity}</span>;
+      {row.in_use_now > 0 && (
+        <div
+          className="mt-0.5 text-xs font-medium text-amber-700"
+          title={
+            row.active_event_titles.length > 0
+              ? `On: ${row.active_event_titles.join(", ")}`
+              : undefined
+          }
+        >
+          {row.in_use_now} in use now
+        </div>
+      )}
+    </div>
+  );
 }
 
-export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
+export function InventoryTable({
+  rows,
+  events,
+  selectedIds,
+  onToggle,
+  onToggleAll,
+}: {
+  rows: InventoryListRow[];
+  events: EventOption[];
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
+  onToggleAll: (checked: boolean) => void;
+}) {
+  const allSelected =
+    rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
+
   return (
     <div className="overflow-hidden rounded-(--radius-card) border border-line bg-card">
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-left">
+              <th className="px-4 py-3">
+                <input
+                  type="checkbox"
+                  aria-label="Select all"
+                  checked={allSelected}
+                  onChange={(e) => onToggleAll(e.target.checked)}
+                  className="h-4 w-4 accent-navy"
+                />
+              </th>
               <th className="px-4 py-3 font-medium text-muted">
                 <span className="sr-only">Image</span>
               </th>
@@ -60,6 +101,9 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
               <th className="px-4 py-3 font-medium text-muted">
                 <span className="eyebrow">Status</span>
               </th>
+              <th className="px-4 py-3 text-right font-medium text-muted">
+                <span className="eyebrow">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -68,6 +112,15 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
                 key={row.id}
                 className="border-b border-line last:border-b-0 transition hover:bg-cream"
               >
+                <td className="px-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${row.name}`}
+                    checked={selectedIds.has(row.id)}
+                    onChange={() => onToggle(row.id)}
+                    className="h-4 w-4 accent-navy"
+                  />
+                </td>
                 <td className="px-4 py-3">
                   {row.image_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -117,6 +170,20 @@ export function InventoryTable({ rows }: { rows: InventoryListRow[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={row.status} />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {row.status !== "retired" && (
+                    <ReserveForEventButton
+                      item={{
+                        id: row.id,
+                        name: row.name,
+                        kind: row.kind,
+                        available_now: row.available_now,
+                        available_unit_options: row.available_unit_options,
+                      }}
+                      events={events}
+                    />
+                  )}
                 </td>
               </tr>
             ))}

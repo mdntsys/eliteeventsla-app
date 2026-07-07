@@ -4,6 +4,7 @@ import { requireView } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listInventory, listCategories } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
+import { listEventOptions } from "@/lib/events/queries";
 import { InventoryBrowser } from "@/components/inventory/inventory-browser";
 import { NewItemForm } from "@/components/inventory/new-item-form";
 import { CsvImport } from "@/components/inventory/csv-import";
@@ -14,10 +15,11 @@ export const metadata: Metadata = { title: "Inventory" };
 export default async function InventoryPage() {
   await requireView("inventory");
 
-  const [rows, categories, locationOptions] = await Promise.all([
+  const [rows, categories, locationOptions, events] = await Promise.all([
     listInventory(),
     listCategories(),
     listLocationOptions(),
+    listEventOptions(),
   ]);
 
   return (
@@ -48,7 +50,11 @@ export default async function InventoryPage() {
               locationOptions={locationOptions}
             />
           </div>
-          <InventoryBrowser rows={rows} />
+          <InventoryBrowser
+            rows={rows}
+            events={events}
+            locationOptions={locationOptions}
+          />
         </div>
       )}
     </>

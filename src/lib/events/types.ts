@@ -94,6 +94,48 @@ export type EventDetail = EventRow & {
   attachments: AttachmentRow[];
 };
 
+// --- Reserve-from-inventory picker ------------------------------------------
+
+/** An event offered in the inventory tab's "reserve for an event" picker. */
+export type EventOption = {
+  id: string;
+  label: string;
+  /** Default reserve window (YYYY-MM-DD, "" when unknown) for the form inputs. */
+  defaultFrom: string;
+  defaultTo: string;
+};
+
+// --- Pick list --------------------------------------------------------------
+
+/** A single line on a per-event pick list. */
+export type PickListLine = {
+  name: string;
+  kind: "bulk" | "serialized";
+  /** "×3" for bulk, the unit asset tag (or "Any available unit") for serialized. */
+  detail: string;
+  section: string | null;
+};
+
+/** Pick-list lines grouped by the physical location they're pulled from. */
+export type PickListGroup = {
+  location: string;
+  lines: PickListLine[];
+};
+
+/** The full pick-list dataset for one event. */
+export type EventPickList = {
+  event: {
+    id: string;
+    title: string;
+    event_date: string | null;
+    venue_name: string | null;
+    window: string | null;
+  };
+  groups: PickListGroup[];
+  totalLines: number;
+  totalUnits: number;
+};
+
 // --- Availability -----------------------------------------------------------
 
 export type AvailabilityUnit = {

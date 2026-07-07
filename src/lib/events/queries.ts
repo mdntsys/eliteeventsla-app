@@ -10,6 +10,10 @@ import type {
   EventInvoiceRow,
   EventItemRow,
   EventListRow,
+  EventOption,
+  EventPickList,
+  PickListGroup,
+  PickListLine,
   ScheduleEntryRow,
   StaffMember,
 } from "@/lib/events/types";
@@ -272,6 +276,198 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
     items,
     schedule,
     attachments,
+  };
+}
+
+// --- listEventOptions -------------------------------------------------------
+
+/** Turn a date-ish value into a YYYY-MM-DD string for a <input type="date">. */
+function toDateInput(value: string | null): string {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
+
+/**
+ * Events as compact options for the inventory tab's "reserve for an event"
+ * picker: id, a readable label, and a default reserve window. Cancelled events
+ * are excluded; most recent first.
+ */
+export async function listEventOptions(): Promise<EventOption[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("events")
+    .select("id, title, event_date, start_at, end_at, status")
+    .neq("status", "cancelled")
+    .order("event_date", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((ev) => {
+    const from = toDateInput(ev.start_at) || toDateInput(ev.event_date);
+    const to = toDateInput(ev.end_at) || toDateInput(ev.event_date);
+    const dateLabel = ev.event_date
+      ? new Date(`${ev.event_date}T00:00:00`).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : null;
+    return {
+      id: ev.id,
+      label: dateLabel ? `${ev.title} · ${dateLabel}` : ev.title,
+      defaultFrom: from,
+      defaultTo: to,
+    };
+  });
+}
+
+// --- getEventPickList -------------------------------------------------------
+
+/**
+ * A warehouse pick list for one event: every reserved line grouped by the
+ * physical location it's pulled from (a serialized line follows its unit's
+ * location; a bulk line follows the item's). Returns null if the event is not
+ * visible. Groups are ordered by location name with "Unassigned" last.
+ */
+export async function getEventPickList(
+  eventId: string,
+): Promise<EventPickList | null> {
+  const supabase = await createClient();
+
+  const { data: ev, error: evError } = await supabase
+    .from("events")
+    .select("id, title, event_date, venue_name, start_at, end_at")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (evError) throw new Error(evError.message);
+  if (!ev) return null;
+
+  const { data: itemsData, error: itemsError } = await supabase
+    .from("event_items")
+    .select(
+      "quantity, unit_id, inventory_items(name, kind, location_id, row_id, section), inventory_units(asset_tag, location_id, row_id, section)",
+    )
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: true });
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  type Row = {
+    quantity: number | null;
+    unit_id: string | null;
+    inventory_items: {
+      name: string;
+      kind: "bulk" | "serialized";
+      location_id: string | null;
+      row_id: string | null;
+      section: string | null;
+    } | null;
+    inventory_units: {
+      asset_tag: string | null;
+      location_id: string | null;
+      row_id: string | null;
+      section: string | null;
+    } | null;
+  };
+  const rows = (itemsData ?? []) as Row[];
+
+  // Resolve every referenced location + row name in two batched lookups.
+  const locationIds = new Set<string>();
+  const rowIds = new Set<string>();
+  for (const r of rows) {
+    const loc = r.inventory_units?.location_id ?? r.inventory_items?.location_id;
+    const row = r.inventory_units?.row_id ?? r.inventory_items?.row_id;
+    if (loc) locationIds.add(loc);
+    if (row) rowIds.add(row);
+  }
+
+  const [locationsRes, rowsRes] = await Promise.all([
+    locationIds.size > 0
+      ? supabase.from("locations").select("id, name").in("id", Array.from(locationIds))
+      : Promise.resolve({ data: [], error: null }),
+    rowIds.size > 0
+      ? supabase.from("warehouse_rows").select("id, label").in("id", Array.from(rowIds))
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (locationsRes.error) throw new Error(locationsRes.error.message);
+  if (rowsRes.error) throw new Error(rowsRes.error.message);
+
+  const locationNames = new Map<string, string>();
+  for (const l of locationsRes.data ?? []) locationNames.set(l.id, l.name);
+  const rowLabels = new Map<string, string>();
+  for (const r of rowsRes.data ?? []) rowLabels.set(r.id, r.label);
+
+  // Group lines by their "where to pull it" label (location + row).
+  const groups = new Map<string, PickListLine[]>();
+  let totalUnits = 0;
+  for (const r of rows) {
+    const item = r.inventory_items;
+    if (!item) continue;
+    const isSerialized = item.kind === "serialized";
+    const locId = r.inventory_units?.location_id ?? item.location_id;
+    const rowId = r.inventory_units?.row_id ?? item.row_id;
+    const section = r.inventory_units?.section ?? item.section;
+
+    const locName = locId ? (locationNames.get(locId) ?? null) : null;
+    const rowLabel = rowId ? (rowLabels.get(rowId) ?? null) : null;
+    const groupLabel = locName
+      ? rowLabel
+        ? `${locName} · Row ${rowLabel}`
+        : locName
+      : "Unassigned";
+
+    const qty = r.quantity ?? 1;
+    totalUnits += isSerialized ? 1 : qty;
+
+    const line: PickListLine = {
+      name: item.name,
+      kind: item.kind,
+      detail: isSerialized
+        ? (r.inventory_units?.asset_tag ?? "Any available unit")
+        : `×${qty}`,
+      section,
+    };
+    const list = groups.get(groupLabel) ?? [];
+    list.push(line);
+    groups.set(groupLabel, list);
+  }
+
+  const orderedGroups: PickListGroup[] = Array.from(groups.entries())
+    .sort(([a], [b]) => {
+      if (a === "Unassigned") return 1;
+      if (b === "Unassigned") return -1;
+      return a.localeCompare(b);
+    })
+    .map(([location, lines]) => ({
+      location,
+      lines: lines.sort((a, b) => a.name.localeCompare(b.name)),
+    }));
+
+  // A compact date window string for the header (or null).
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  let windowStr: string | null = null;
+  if (ev.start_at && ev.end_at) windowStr = `${fmt(ev.start_at)} – ${fmt(ev.end_at)}`;
+  else if (ev.start_at || ev.end_at) windowStr = fmt((ev.start_at ?? ev.end_at) as string);
+
+  return {
+    event: {
+      id: ev.id,
+      title: ev.title,
+      event_date: ev.event_date,
+      venue_name: ev.venue_name,
+      window: windowStr,
+    },
+    groups: orderedGroups,
+    totalLines: rows.length,
+    totalUnits,
   };
 }
 

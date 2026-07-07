@@ -395,6 +395,16 @@ export function InventoryPanel({
         <h2 className="font-display text-xl font-light text-navy">Inventory</h2>
         <div className="flex items-center gap-3">
           <span className="eyebrow">{ev.items.length} reserved</span>
+          {ev.items.length > 0 && (
+            <a
+              href={`/events/${ev.id}/pick-list`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-(--radius-card) border border-line px-3 py-1.5 text-xs font-medium text-muted transition hover:border-navy hover:text-navy"
+            >
+              Pick list (PDF)
+            </a>
+          )}
           {remaining > 0 && (
             <CheckOutAllButton eventId={ev.id} remaining={remaining} />
           )}
