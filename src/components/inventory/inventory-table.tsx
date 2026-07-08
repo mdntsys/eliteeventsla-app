@@ -84,6 +84,9 @@ export function InventoryTable({
                 <span className="eyebrow">Name</span>
               </th>
               <th className="px-4 py-3 font-medium text-muted">
+                <span className="eyebrow">SKU</span>
+              </th>
+              <th className="px-4 py-3 font-medium text-muted">
                 <span className="eyebrow">Location</span>
               </th>
               <th className="px-4 py-3 font-medium text-muted">
@@ -140,16 +143,20 @@ export function InventoryTable({
                   >
                     {row.name}
                   </Link>
-                  <div className="mt-1 flex items-center gap-2">
-                    {row.sku && (
-                      <span className="text-xs text-muted">{row.sku}</span>
-                    )}
-                    {row.open_maintenance > 0 && (
+                  {row.open_maintenance > 0 && (
+                    <div className="mt-1 flex items-center gap-2">
                       <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
                         {row.open_maintenance} open maintenance
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-ink tabular-nums">
+                  {row.sku ? (
+                    row.sku
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-ink">
                   {row.location_summary ?? (
