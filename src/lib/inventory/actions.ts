@@ -75,6 +75,23 @@ const SetUnitLocationSchema = z.object({
   section: optionalText,
 });
 
+const UpdateUnitSchema = z.object({
+  unit_id: z.uuid("A unit is required."),
+  item_id: z.uuid("An item is required."),
+  asset_tag: optionalText,
+  serial_number: optionalText,
+  status: unitStatusEnum,
+  condition_notes: optionalText,
+  location_id: optionalUuid,
+  row_id: optionalUuid,
+  section: optionalText,
+});
+
+const DeleteUnitSchema = z.object({
+  unit_id: z.uuid("A unit is required."),
+  item_id: z.uuid("An item is required."),
+});
+
 const SetInventoryImageSchema = z.object({
   kind: z.enum(["item", "unit"]),
   target_id: z.uuid("A target is required."),
@@ -411,6 +428,125 @@ export async function setUnitLocation(
   }
 
   revalidatePath(`/operations/inventory/${data.item_id}`);
+  revalidatePath("/operations/inventory");
+  return { success: true };
+}
+
+/**
+ * Edit an existing serialized unit (a "child SKU"): its asset tag, serial
+ * number, status, condition notes, and storage location — in one save. This is
+ * the full-detail counterpart to setUnitLocation (which only moved location).
+ */
+export async function updateInventoryUnit(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = UpdateUnitSchema.safeParse({
+    unit_id: formData.get("unit_id"),
+    item_id: formData.get("item_id"),
+    asset_tag: formData.get("asset_tag"),
+    serial_number: formData.get("serial_number"),
+    status: formData.get("status"),
+    condition_notes: formData.get("condition_notes"),
+    location_id: formData.get("location_id"),
+    row_id: formData.get("row_id"),
+    section: formData.get("section"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("inventory_units")
+    .update({
+      asset_tag: data.asset_tag,
+      serial_number: data.serial_number,
+      status: data.status,
+      condition_notes: data.condition_notes,
+      location_id: data.location_id,
+      row_id: data.row_id,
+      section: data.section,
+    })
+    .eq("id", data.unit_id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/operations/inventory/${data.item_id}`);
+  revalidatePath("/operations/inventory");
+  return { success: true };
+}
+
+/**
+ * Delete a serialized unit that was entered by mistake (mistake-safe). A unit
+ * that's ever been reserved on an event, or that carries maintenance history,
+ * holds records worth keeping — those are protected and should be retired
+ * (status='retired') instead. Only genuinely orphaned units hard-delete.
+ */
+export async function deleteInventoryUnit(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = DeleteUnitSchema.safeParse({
+    unit_id: formData.get("unit_id"),
+    item_id: formData.get("item_id"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const { unit_id, item_id } = parsed.data;
+  const supabase = await createClient();
+
+  // event_items.unit_id is ON DELETE SET NULL, so a delete would silently
+  // detach this unit from any job it was on. Protect those.
+  const { count: eventCount, error: eventError } = await supabase
+    .from("event_items")
+    .select("id", { count: "exact", head: true })
+    .eq("unit_id", unit_id);
+  if (eventError) {
+    return { error: eventError.message };
+  }
+  if ((eventCount ?? 0) > 0) {
+    return {
+      error:
+        "This unit has been reserved on an event, so it can't be deleted. Set its status to “Retired” instead to keep its history.",
+    };
+  }
+
+  // maintenance_records.unit_id is ON DELETE CASCADE, so a delete would wipe the
+  // unit's repair/cost history. Protect those too.
+  const { count: maintCount, error: maintError } = await supabase
+    .from("maintenance_records")
+    .select("id", { count: "exact", head: true })
+    .eq("unit_id", unit_id);
+  if (maintError) {
+    return { error: maintError.message };
+  }
+  if ((maintCount ?? 0) > 0) {
+    return {
+      error:
+        "This unit has maintenance history, so it can't be deleted. Set its status to “Retired” instead to keep its history.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("inventory_units")
+    .delete()
+    .eq("id", unit_id);
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/operations/inventory/${item_id}`);
   revalidatePath("/operations/inventory");
   return { success: true };
 }

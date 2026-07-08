@@ -1,7 +1,11 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { addInventoryUnit, setUnitLocation } from "@/lib/inventory/actions";
+import {
+  addInventoryUnit,
+  updateInventoryUnit,
+  deleteInventoryUnit,
+} from "@/lib/inventory/actions";
 import type {
   ActionState,
   InventoryItemDetail,
@@ -31,7 +35,11 @@ function formatUnitLocation(unit: InventoryUnitView): string {
   return parts.join(" · ");
 }
 
-function UnitLocationForm({
+/**
+ * Full edit form for a single serialized unit: asset tag, serial number,
+ * status, condition notes, and storage location in one save.
+ */
+function UnitEditForm({
   unit,
   itemId,
   options,
@@ -41,7 +49,7 @@ function UnitLocationForm({
   options: LocationOption[];
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
-    setUnitLocation,
+    updateInventoryUnit,
     undefined,
   );
 
@@ -49,6 +57,51 @@ function UnitLocationForm({
     <form action={action} className="flex flex-col gap-3">
       <input type="hidden" name="unit_id" value={unit.id} />
       <input type="hidden" name="item_id" value={itemId} />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Asset tag</span>
+          <input
+            name="asset_tag"
+            type="text"
+            defaultValue={unit.asset_tag ?? ""}
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Serial number</span>
+          <input
+            name="serial_number"
+            type="text"
+            defaultValue={unit.serial_number ?? ""}
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Status</span>
+          <select
+            name="status"
+            defaultValue={unit.status}
+            className={inputClass}
+          >
+            {UNIT_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s.replace("_", " ")}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Condition notes</span>
+          <input
+            name="condition_notes"
+            type="text"
+            defaultValue={unit.condition_notes ?? ""}
+            className={inputClass}
+          />
+        </label>
+      </div>
+
       <LocationFields
         options={options}
         defaultLocationId={unit.location_id}
@@ -63,16 +116,67 @@ function UnitLocationForm({
         </p>
       )}
       {state?.success && (
-        <p className="text-sm text-green-700">Location updated.</p>
+        <p className="text-sm text-green-700">Unit updated.</p>
       )}
 
       <button
         type="submit"
         disabled={pending}
-        className="self-start rounded-(--radius-card) border border-line px-3.5 py-2 text-sm font-medium text-navy transition hover:border-navy disabled:opacity-60"
+        className="self-start rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90 disabled:opacity-60"
       >
-        {pending ? "Saving…" : "Save location"}
+        {pending ? "Saving…" : "Save unit"}
       </button>
+    </form>
+  );
+}
+
+/**
+ * Mistake-safe delete for a single unit. The server action blocks the delete
+ * when the unit has event or maintenance history and tells you to retire it
+ * instead; a confirm guards a mis-click.
+ */
+function DeleteUnitButton({
+  unit,
+  itemId,
+}: {
+  unit: InventoryUnitView;
+  itemId: string;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    deleteInventoryUnit,
+    undefined,
+  );
+
+  const label = unit.asset_tag ?? "this unit";
+
+  return (
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (
+          !window.confirm(
+            `Delete “${label}”? Only do this for a unit entered by mistake — this can't be undone.`,
+          )
+        ) {
+          e.preventDefault();
+        }
+      }}
+      className="flex flex-col items-start gap-1"
+    >
+      <input type="hidden" name="unit_id" value={unit.id} />
+      <input type="hidden" name="item_id" value={itemId} />
+      <button
+        type="submit"
+        disabled={pending}
+        className="rounded-(--radius-card) border border-red-200 bg-red-50 px-3.5 py-2 text-sm font-medium text-red-700 transition hover:border-red-700 disabled:opacity-60"
+      >
+        {pending ? "Deleting…" : "Delete unit"}
+      </button>
+      {state?.error && (
+        <p role="alert" className="text-xs text-red-700">
+          {state.error}
+        </p>
+      )}
     </form>
   );
 }
@@ -122,14 +226,17 @@ function UnitRow({
             onClick={() => setEditing((v) => !v)}
             className="text-xs text-muted underline-offset-2 transition hover:text-navy hover:underline"
           >
-            {editing ? "Cancel" : "Edit location"}
+            {editing ? "Cancel" : "Edit"}
           </button>
         </div>
       </div>
 
       {editing && (
-        <div className="mt-3 border-t border-line pt-3">
-          <UnitLocationForm unit={unit} itemId={itemId} options={options} />
+        <div className="mt-3 flex flex-col gap-4 border-t border-line pt-3">
+          <UnitEditForm unit={unit} itemId={itemId} options={options} />
+          <div className="border-t border-line pt-3">
+            <DeleteUnitButton unit={unit} itemId={itemId} />
+          </div>
         </div>
       )}
     </li>
