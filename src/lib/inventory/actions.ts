@@ -49,6 +49,16 @@ const CreateItemSchema = z.object({
   description: optionalText,
 });
 
+const UpdateItemSchema = z.object({
+  item_id: z.uuid("An item is required."),
+  name: z.string().trim().min(1, "Name is required."),
+  sku: optionalText,
+  category_id: optionalUuid,
+  daily_rate: optionalMoney,
+  replacement_cost: optionalMoney,
+  description: optionalText,
+});
+
 const AddUnitSchema = z.object({
   item_id: z.uuid("An item is required."),
   asset_tag: optionalText,
@@ -244,6 +254,54 @@ export async function addInventoryUnit(
     row_id: data.row_id,
     section: data.section,
   });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath(`/operations/inventory/${data.item_id}`);
+  revalidatePath("/operations/inventory");
+  return { success: true };
+}
+
+/**
+ * Edit an item's core details from its detail page: name, SKU, category, daily
+ * rate, replacement cost, and description. (Location has its own form; status
+ * and quantity-on-hand are edited separately.)
+ */
+export async function updateInventoryItem(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = UpdateItemSchema.safeParse({
+    item_id: formData.get("item_id"),
+    name: formData.get("name"),
+    sku: formData.get("sku"),
+    category_id: formData.get("category_id"),
+    daily_rate: formData.get("daily_rate"),
+    replacement_cost: formData.get("replacement_cost"),
+    description: formData.get("description"),
+  });
+  if (!parsed.success) {
+    return { error: firstError(parsed.error) };
+  }
+
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("inventory_items")
+    .update({
+      name: data.name,
+      sku: data.sku,
+      category_id: data.category_id,
+      daily_rate: data.daily_rate,
+      replacement_cost: data.replacement_cost,
+      description: data.description,
+    })
+    .eq("id", data.item_id);
 
   if (error) {
     return { error: error.message };

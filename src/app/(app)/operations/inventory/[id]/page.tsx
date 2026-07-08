@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireView } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
-import { getInventoryItem } from "@/lib/inventory/queries";
+import { getInventoryItem, listCategories } from "@/lib/inventory/queries";
 import { listLocationOptions } from "@/lib/locations/queries";
 import { PageHeader } from "@/components/ui/page-header";
 import { KindBadge } from "@/components/inventory/status-badge";
 import { ItemStatusControl } from "@/components/inventory/item-status-control";
+import { ItemDetailsForm } from "@/components/inventory/item-details-form";
 import { ItemLocationForm } from "@/components/inventory/item-location-form";
 import { UnitsPanel } from "@/components/inventory/units-panel";
 import { MaintenancePanel } from "@/components/inventory/maintenance-panel";
@@ -58,9 +59,10 @@ export default async function InventoryItemPage({
 }) {
   const profile = await requireView("inventory");
   const { id } = await params;
-  const [item, locationOptions] = await Promise.all([
+  const [item, locationOptions, categories] = await Promise.all([
     getInventoryItem(id),
     listLocationOptions(),
+    listCategories(),
   ]);
   if (!item) notFound();
 
@@ -134,6 +136,20 @@ export default async function InventoryItemPage({
               </p>
             </div>
           )}
+
+          <div className="mt-6 border-t border-line pt-6">
+            <p className="eyebrow mb-3">Edit details</p>
+            <ItemDetailsForm
+              itemId={item.id}
+              categories={categories}
+              defaultName={item.name}
+              defaultSku={item.sku}
+              defaultCategoryId={item.category_id}
+              defaultDailyRate={item.daily_rate}
+              defaultReplacementCost={item.replacement_cost}
+              defaultDescription={item.description}
+            />
+          </div>
 
           <div className="mt-6 border-t border-line pt-6">
             <p className="eyebrow mb-3">Edit location</p>
