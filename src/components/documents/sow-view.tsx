@@ -67,6 +67,8 @@ export function SowDocumentView({ payload }: { payload: SowPayload }) {
   const client =
     [payload.clientName, payload.clientCompany].filter(Boolean).join(" · ") ||
     "—";
+  const clientParty =
+    payload.clientName || payload.clientCompany || "the undersigned Client";
   const inclusions = payload.inclusions ?? [];
   const camera = cameraTypeLabel(payload.cameraType);
   const schedule = sowPaymentSchedule(payload);
@@ -76,7 +78,7 @@ export function SowDocumentView({ payload }: { payload: SowPayload }) {
       <Section n={1} title="Parties & Event Overview">
         <p className="text-muted">
           This agreement is made between {payload.companyName} (&ldquo;Company&rdquo;)
-          and the undersigned Client (&ldquo;Client&rdquo;).
+          and {clientParty} (&ldquo;Client&rdquo;).
         </p>
         <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Client">{client}</Field>

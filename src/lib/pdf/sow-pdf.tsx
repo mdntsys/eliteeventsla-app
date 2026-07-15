@@ -182,6 +182,8 @@ function SowDoc({
   const client =
     [payload.clientName, payload.clientCompany].filter(Boolean).join(" · ") ||
     "—";
+  const clientParty =
+    payload.clientName || payload.clientCompany || "the undersigned Client";
 
   return (
     <Document>
@@ -193,7 +195,7 @@ function SowDoc({
         <Text style={styles.sectionH}>1. Parties &amp; Event Overview</Text>
         <Text style={styles.intro}>
           This agreement is made between {payload.companyName} (&quot;Company&quot;)
-          and the undersigned Client (&quot;Client&quot;).
+          and {clientParty} (&quot;Client&quot;).
         </Text>
         <View style={styles.metaGrid}>
           <Meta k="Client" v={client} />
