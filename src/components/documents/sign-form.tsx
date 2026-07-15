@@ -16,11 +16,14 @@ export function SignForm({
   token,
   signerName,
   continueHref,
+  requireMediaRelease = false,
 }: {
   token: string;
   signerName: string | null;
   /** When set (the affiliate portal), show a link into the app after signing. */
   continueHref?: string;
+  /** SOWs (#5): the client must elect Yes/No for the media release to sign. */
+  requireMediaRelease?: boolean;
 }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(
     signDocument,
@@ -45,8 +48,41 @@ export function SignForm({
 
   return (
     <form action={action} className="mt-8 border-t border-line pt-6">
-      <p className="eyebrow">Adopt &amp; Sign</p>
       <input type="hidden" name="token" value={token} />
+
+      {requireMediaRelease && (
+        <fieldset className="mb-6">
+          <legend className="eyebrow">Media release — please choose one</legend>
+          <div className="mt-2 space-y-2">
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input
+                type="radio"
+                name="media_release"
+                value="yes"
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 accent-navy"
+              />
+              <span>
+                <strong>YES</strong> — I agree to the media release terms.
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input
+                type="radio"
+                name="media_release"
+                value="no"
+                required
+                className="mt-0.5 h-4 w-4 shrink-0 accent-navy"
+              />
+              <span>
+                <strong>NO</strong> — I do not agree. Keep our media private.
+              </span>
+            </label>
+          </div>
+        </fieldset>
+      )}
+
+      <p className="eyebrow">Adopt &amp; Sign</p>
 
       <div className="mt-3">
         <label

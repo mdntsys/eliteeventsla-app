@@ -168,7 +168,9 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
 
   const { data: eventData, error: eventError } = await supabase
     .from("events")
-    .select("*, contacts(id, first_name, last_name), companies(id, name)")
+    .select(
+      "*, contacts(id, first_name, last_name, media_release_consent), companies(id, name)",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -176,7 +178,9 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
   if (!eventData) return null;
 
   const { contacts, companies, ...event } = eventData as typeof eventData & {
-    contacts: ContactName;
+    contacts:
+      | (ContactName & { media_release_consent: boolean | null })
+      | null;
     companies: { id: string; name: string } | null;
   };
 
@@ -273,6 +277,7 @@ export async function getEvent(id: string): Promise<EventDetail | null> {
     ...event,
     client_name: contactName(contacts),
     company_name: companies?.name ?? null,
+    contact_media_release: contacts?.media_release_consent ?? null,
     items,
     schedule,
     attachments,

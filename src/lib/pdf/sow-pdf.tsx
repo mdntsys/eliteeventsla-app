@@ -8,13 +8,21 @@ import {
   StyleSheet,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import type { SowPayload } from "@/lib/documents/sow";
+import {
+  cameraTypeLabel,
+  sowPaymentSchedule,
+  sowTermsClauses,
+  DEFAULT_PACKAGE_NAME,
+  type SowPayload,
+} from "@/lib/documents/sow";
 import type { ContractSignature } from "@/lib/pdf/contract-pdf";
 
 /**
- * Renders a customer Statement of Work as a PDF: event details, the agreed scope
- * table, notes, and — when signed — the executed signature block plus a
- * Certificate of Completion (audit trail + fingerprint).
+ * Renders a customer Statement of Work (Photo Booth Rental Contract) as a PDF —
+ * the six contract sections (overview, package inclusions, pricing + payment
+ * schedule, terms, media-release election, signatures) and, when signed, the
+ * executed signature block plus a Certificate of Completion (audit trail +
+ * fingerprint).
  */
 
 const NAVY = "#16263a";
@@ -32,8 +40,14 @@ const styles = StyleSheet.create({
     lineHeight: 1.5,
   },
   brand: { fontSize: 16, color: NAVY, fontFamily: "Helvetica-Bold" },
-  title: { fontSize: 15, color: NAVY, marginTop: 2, fontFamily: "Helvetica-Bold" },
-  metaGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 12 },
+  title: {
+    fontSize: 15,
+    color: NAVY,
+    marginTop: 2,
+    fontFamily: "Helvetica-Bold",
+  },
+  intro: { fontSize: 9.5, color: MUTED, marginTop: 8 },
+  metaGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 10 },
   metaCell: { width: "50%", marginBottom: 6 },
   metaKey: { fontSize: 8, color: MUTED },
   metaVal: { fontSize: 10, color: INK },
@@ -41,29 +55,41 @@ const styles = StyleSheet.create({
     fontSize: 10.5,
     color: NAVY,
     fontFamily: "Helvetica-Bold",
-    marginTop: 14,
+    marginTop: 16,
     marginBottom: 4,
   },
-  thead: {
+  body: { fontSize: 9.5 },
+  li: { flexDirection: "row", marginTop: 3 },
+  liBullet: { width: 12, fontSize: 9.5, color: MUTED },
+  liText: { flex: 1, fontSize: 9.5 },
+  liLabel: { fontFamily: "Helvetica-Bold" },
+  totalRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     borderBottomWidth: 1,
     borderBottomColor: LINE,
-    paddingBottom: 3,
+    paddingBottom: 4,
+    marginTop: 2,
   },
-  row: {
+  totalLabel: { fontSize: 10, color: MUTED },
+  totalVal: { fontSize: 13, color: NAVY, fontFamily: "Helvetica-Bold" },
+  payRow: {
     flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderBottomColor: LINE,
-    paddingVertical: 4,
+    justifyContent: "space-between",
+    marginTop: 5,
   },
-  cDesc: { flex: 1, fontSize: 9.5 },
-  cQty: { width: 44, fontSize: 9.5, textAlign: "right" },
-  cAmt: { width: 70, fontSize: 9.5, textAlign: "right" },
-  th: { fontSize: 8, color: MUTED },
-  totalRow: { flexDirection: "row", justifyContent: "flex-end", marginTop: 6 },
-  totalLabel: { fontSize: 10, color: MUTED, marginRight: 12 },
-  totalVal: { fontSize: 11, color: NAVY, fontFamily: "Helvetica-Bold" },
-  notes: { fontSize: 9.5, marginTop: 8 },
+  payLabel: { fontSize: 9.5, color: INK },
+  payDue: { fontSize: 8, color: MUTED },
+  payAmt: { fontSize: 9.5, color: INK },
+  electionBox: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: LINE,
+    borderRadius: 4,
+    padding: 8,
+    fontSize: 9.5,
+  },
+  notes: { fontSize: 9.5, marginTop: 6 },
   hr: { borderTopWidth: 1, borderTopColor: LINE, marginVertical: 16 },
   sigRow: { flexDirection: "row", gap: 40, marginTop: 8 },
   sigCol: { flex: 1 },
@@ -125,6 +151,24 @@ function Meta({ k, v }: { k: string; v: string }) {
   );
 }
 
+function Bullet({
+  label,
+  children,
+}: {
+  label?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.li}>
+      <Text style={styles.liBullet}>•</Text>
+      <Text style={styles.liText}>
+        {label ? <Text style={styles.liLabel}>{label}: </Text> : null}
+        {children}
+      </Text>
+    </View>
+  );
+}
+
 function SowDoc({
   payload,
   signature,
@@ -132,47 +176,100 @@ function SowDoc({
   payload: SowPayload;
   signature?: ContractSignature;
 }) {
+  const inclusions = payload.inclusions ?? [];
+  const camera = cameraTypeLabel(payload.cameraType);
+  const schedule = sowPaymentSchedule(payload);
+  const client =
+    [payload.clientName, payload.clientCompany].filter(Boolean).join(" · ") ||
+    "—";
+
   return (
     <Document>
       <Page size="LETTER" style={styles.page}>
         <Text style={styles.brand}>{payload.companyName}</Text>
-        <Text style={styles.title}>Statement of Work</Text>
+        <Text style={styles.title}>Photo Booth Rental Contract</Text>
 
+        {/* 1 — Parties & Event Overview */}
+        <Text style={styles.sectionH}>1. Parties &amp; Event Overview</Text>
+        <Text style={styles.intro}>
+          This agreement is made between {payload.companyName} (&quot;Company&quot;)
+          and the undersigned Client (&quot;Client&quot;).
+        </Text>
         <View style={styles.metaGrid}>
+          <Meta k="Client" v={client} />
+          <Meta k="Event date" v={fmtDate(payload.eventDate)} />
           <Meta k="Event" v={payload.eventTitle} />
-          <Meta k="Date" v={fmtDate(payload.eventDate)} />
+          <Meta k="Event location / venue" v={payload.venueName ?? "—"} />
           <Meta k="Window" v={fmtWindow(payload.startAt, payload.endAt)} />
-          <Meta k="Venue" v={payload.venueName ?? "—"} />
-          <Meta
-            k="Client"
-            v={
-              [payload.clientName, payload.clientCompany]
-                .filter(Boolean)
-                .join(" · ") || "—"
-            }
-          />
           <Meta
             k="Guests"
             v={payload.guestCount != null ? String(payload.guestCount) : "—"}
           />
         </View>
 
-        <Text style={styles.sectionH}>Scope of work</Text>
-        <View style={styles.thead}>
-          <Text style={[styles.cDesc, styles.th]}>Description</Text>
-          <Text style={[styles.cQty, styles.th]}>Qty</Text>
-          <Text style={[styles.cAmt, styles.th]}>Amount</Text>
+        {/* 2 — Package Inclusions & Hours of Service */}
+        <Text style={styles.sectionH}>
+          2. Package Inclusions &amp; Hours of Service
+        </Text>
+        <Text style={styles.body}>
+          The Client is purchasing the{" "}
+          {payload.packageName || DEFAULT_PACKAGE_NAME}
+          {payload.serviceHours != null
+            ? `, which includes ${payload.serviceHours} hours of active service.`
+            : "."}
+        </Text>
+        {camera ? <Bullet label="Camera / booth">{camera}</Bullet> : null}
+        {inclusions.map((i, idx) => (
+          <Bullet key={idx} label={i.label}>
+            {i.detail}
+          </Bullet>
+        ))}
+        {payload.setupNote ? (
+          <Text style={[styles.notes, { color: MUTED }]}>
+            Note: {payload.setupNote}
+          </Text>
+        ) : null}
+
+        {/* 3 — Pricing & Payments */}
+        <Text style={styles.sectionH}>3. Pricing &amp; Payments</Text>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>Total Package Cost</Text>
+          <Text style={styles.totalVal}>{usd(payload.total)}</Text>
         </View>
-        {payload.scopeItems.map((it, i) => (
-          <View style={styles.row} key={i}>
-            <Text style={styles.cDesc}>{it.description}</Text>
-            <Text style={styles.cQty}>{it.quantity}</Text>
-            <Text style={styles.cAmt}>{usd(it.amount)}</Text>
+        {schedule.map((s, i) => (
+          <View style={styles.payRow} key={i}>
+            <View>
+              <Text style={styles.payLabel}>{s.label}</Text>
+              <Text style={styles.payDue}>{s.due}</Text>
+            </View>
+            <Text style={styles.payAmt}>{usd(s.amount)}</Text>
           </View>
         ))}
-        <View style={styles.totalRow}>
-          <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalVal}>{usd(payload.total)}</Text>
+
+        {/* 4 — Terms and Conditions */}
+        <Text style={styles.sectionH}>4. Terms and Conditions</Text>
+        {sowTermsClauses().map((c) => (
+          <Bullet key={c.heading} label={c.heading}>
+            {c.body}
+          </Bullet>
+        ))}
+
+        {/* 5 — Social Media & Media Release */}
+        <Text style={styles.sectionH}>5. Social Media &amp; Media Release</Text>
+        <Text style={styles.body}>
+          The Client grants the Company permission to use photos and digital media
+          captured during the event for promotional, marketing, and social media
+          purposes.
+        </Text>
+        <View style={styles.electionBox}>
+          <Text>
+            Client&apos;s election:{" "}
+            {payload.mediaRelease == null
+              ? "— (not selected)"
+              : payload.mediaRelease
+                ? "YES — I agree to the media release terms."
+                : "NO — I do not agree. Keep our media private."}
+          </Text>
         </View>
 
         {payload.notes ? (
@@ -182,7 +279,9 @@ function SowDoc({
           </>
         ) : null}
 
+        {/* 6 — Signatures & Execution */}
         <View style={styles.hr} />
+        <Text style={styles.sectionH}>6. Signatures &amp; Execution</Text>
         <View style={styles.sigRow}>
           <View style={styles.sigCol}>
             <Text style={styles.sigLabel}>CLIENT</Text>
@@ -197,7 +296,9 @@ function SowDoc({
             </Text>
           </View>
           <View style={styles.sigCol}>
-            <Text style={styles.sigLabel}>{payload.companyName.toUpperCase()}</Text>
+            <Text style={styles.sigLabel}>
+              {payload.companyName.toUpperCase()}
+            </Text>
             <Text style={styles.sigScript}>{payload.companyName}</Text>
             <Text style={styles.sigLineText}>Authorized Representative</Text>
           </View>
@@ -216,7 +317,7 @@ function SowDoc({
       {signature ? (
         <Page size="LETTER" style={styles.page}>
           <Text style={styles.certTitle}>Certificate of Completion</Text>
-          <Text style={styles.cDesc}>
+          <Text style={styles.body}>
             This Statement of Work was signed electronically. The signing record
             below is maintained by {payload.companyName} as evidence of execution
             under the federal ESIGN Act and the applicable Uniform Electronic
@@ -234,6 +335,16 @@ function SowDoc({
             <View style={styles.certRow}>
               <Text style={styles.certKey}>Signer email</Text>
               <Text style={styles.certVal}>{signature.email ?? "—"}</Text>
+            </View>
+            <View style={styles.certRow}>
+              <Text style={styles.certKey}>Media release</Text>
+              <Text style={styles.certVal}>
+                {payload.mediaRelease == null
+                  ? "—"
+                  : payload.mediaRelease
+                    ? "Granted (YES)"
+                    : "Declined (NO)"}
+              </Text>
             </View>
             <View style={styles.certRow}>
               <Text style={styles.certKey}>Signed at</Text>

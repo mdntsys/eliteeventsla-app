@@ -7,12 +7,25 @@ import {
   listCompanyOptions,
   listStaffOptions,
 } from "@/lib/crm/queries";
+import { mediaReleaseLabel } from "@/lib/documents/sow";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
 import { ContactForm } from "@/components/crm/contact-form";
 import { ActivityLog } from "@/components/crm/activity-log";
 
 export const metadata: Metadata = { title: "Contact" };
+
+function formatRecorded(value: string | null): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/Los_Angeles",
+  });
+}
 
 function SummaryField({
   label,
@@ -112,6 +125,29 @@ export default async function ContactDetailPage({
                 </a>
               ) : (
                 "—"
+              )}
+            </SummaryField>
+            <SummaryField label="Media release">
+              {contact.media_release_consent == null ? (
+                <span className="text-muted">Not yet answered</span>
+              ) : (
+                <>
+                  <span
+                    className={
+                      contact.media_release_consent
+                        ? "text-green-800"
+                        : "text-red-800"
+                    }
+                  >
+                    {mediaReleaseLabel(contact.media_release_consent)}
+                  </span>
+                  {formatRecorded(contact.media_release_recorded_at) && (
+                    <span className="mt-0.5 block text-xs text-muted">
+                      Recorded {formatRecorded(contact.media_release_recorded_at)}{" "}
+                      from a signed SOW
+                    </span>
+                  )}
+                </>
               )}
             </SummaryField>
           </div>

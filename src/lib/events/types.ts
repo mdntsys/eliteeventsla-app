@@ -89,6 +89,8 @@ export type EventListRow = EventRow & {
 export type EventDetail = EventRow & {
   client_name: string | null;
   company_name: string | null;
+  /** The client's signed-SOW media-release election (null = not on file). */
+  contact_media_release: boolean | null;
   items: EventItemRow[];
   schedule: ScheduleEntryRow[];
   attachments: AttachmentRow[];

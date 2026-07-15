@@ -269,6 +269,19 @@ export default async function EventDetailPage({
             <SummaryField label="Guests">
               {ev.guest_count != null ? ev.guest_count : "—"}
             </SummaryField>
+            <SummaryField label="Media release (photo sharing)">
+              {ev.contact_media_release == null ? (
+                <span className="text-muted">Not on file</span>
+              ) : ev.contact_media_release ? (
+                <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-800 ring-1 ring-green-200">
+                  OK to capture &amp; share
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-800 ring-1 ring-red-200">
+                  Keep media private
+                </span>
+              )}
+            </SummaryField>
             <SummaryField label="Window">
               {formatWindow(ev.start_at, ev.end_at)}
             </SummaryField>

@@ -1,4 +1,9 @@
 import type { Database } from "@/lib/database.types";
+import type {
+  SowCameraType,
+  SowInclusion,
+  SowPaymentStructure,
+} from "@/lib/documents/sow";
 
 type Tables = Database["public"]["Tables"];
 
@@ -15,6 +20,38 @@ export type ActionState =
 export type DocumentRow = Document & {
   affiliate_name: string | null;
   event_title: string | null;
+};
+
+/**
+ * Pre-fill values for the SOW builder — all form-shaped strings. Built from an
+ * event (a new SOW) or an existing draft's payload (editing). When `documentId`
+ * is present the builder submits to updateSow instead of createSow.
+ */
+export type SowBuilderInitial = {
+  documentId?: string;
+  eventId: string | null;
+  contactId: string | null;
+  companyId: string | null;
+  title: string;
+  eventTitle: string;
+  eventDate: string;
+  startAt: string;
+  endAt: string;
+  venueName: string;
+  guestCount: string;
+  clientName: string;
+  clientCompany: string;
+  signerName: string;
+  signerEmail: string;
+  packageName: string;
+  cameraType: SowCameraType;
+  serviceHours: string;
+  setupNote: string;
+  inclusions: SowInclusion[];
+  total: string;
+  paymentStructure: SowPaymentStructure;
+  depositAmount: string;
+  notes: string;
 };
 
 /** The narrow, no-login view of a document rendered on the public signing page. */

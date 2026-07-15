@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireView } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import {
   getDocument,
   getSignedDocumentUrl,
   listDocumentAudit,
 } from "@/lib/documents/queries";
+import type { SowPayload } from "@/lib/documents/sow";
 import { PageHeader } from "@/components/ui/page-header";
 import { DocumentActions } from "@/components/documents/document-actions";
+import { SowDocumentView } from "@/components/documents/sow-view";
 
 export const metadata: Metadata = { title: "Document" };
 
@@ -59,7 +63,7 @@ export default async function DocumentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireView("documents");
+  const profile = await requireView("documents");
   const { id } = await params;
 
   const doc = await getDocument(id);
@@ -103,6 +107,32 @@ export default async function DocumentDetailPage({
             )}
           </div>
         </section>
+
+        {doc.kind === "customer_sow" && (
+          <section className="rounded-(--radius-card) border border-line bg-card p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-display text-lg font-light text-navy">
+                  Document preview
+                </h2>
+                <p className="text-sm text-muted">
+                  {doc.status === "draft"
+                    ? "Review the full document, then send it for signature."
+                    : "Exactly what the client sees on the signing link."}
+                </p>
+              </div>
+              {doc.status === "draft" && canEdit(profile, "documents") && (
+                <Link
+                  href={`/documents/${doc.id}/edit`}
+                  className="shrink-0 rounded-(--radius-card) border border-line px-4 py-2 text-sm text-muted transition hover:border-navy hover:text-navy"
+                >
+                  Edit draft
+                </Link>
+              )}
+            </div>
+            <SowDocumentView payload={doc.payload as SowPayload} />
+          </section>
+        )}
 
         {doc.status === "signed" && (
           <section className="rounded-(--radius-card) border border-line bg-card p-6">

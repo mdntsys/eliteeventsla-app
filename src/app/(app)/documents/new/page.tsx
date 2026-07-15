@@ -14,7 +14,7 @@ export default async function NewSowPage({
   await requireView("documents");
 
   const { event } = await searchParams;
-  const defaults = event ? await getEventSowDefaults(event) : null;
+  const initial = event ? await getEventSowDefaults(event) : null;
 
   return (
     <>
@@ -24,7 +24,7 @@ export default async function NewSowPage({
         description="Build a statement of work to send a customer for signature."
       />
 
-      <SowBuilder defaults={defaults} />
+      <SowBuilder initial={initial} />
     </>
   );
 }

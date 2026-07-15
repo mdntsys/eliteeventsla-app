@@ -17,9 +17,10 @@ import {
 } from "@/lib/documents/contract";
 import {
   sowCanonicalText,
-  sowTotal,
+  standardBoothInclusions,
+  DEFAULT_PACKAGE_NAME,
   type SowPayload,
-  type SowScopeItem,
+  type SowInclusion,
 } from "@/lib/documents/sow";
 import {
   optionalUuid,
@@ -27,6 +28,7 @@ import {
   optionalDate,
   optionalPacificDateTime,
   optionalInt,
+  optionalMoney,
 } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/documents/types";
 
@@ -239,19 +241,25 @@ export async function prepareMyContractForSigning(): Promise<{
   };
 }
 
-const ScopeItemSchema = z.object({
-  description: z.string().trim().min(1),
-  quantity: z.coerce.number().refine((n) => Number.isFinite(n) && n >= 0),
-  amount: z.coerce.number().refine((n) => Number.isFinite(n) && n >= 0),
+const InclusionSchema = z.object({
+  label: z.string().trim().min(1),
+  detail: z.string().trim().default(""),
 });
 
-const CreateSowSchema = z.object({
+/** Payment structure: anything that isn't an explicit "split" is "full". */
+const paymentStructureSchema = z.preprocess(
+  (v) => (v === "split" ? "split" : "full"),
+  z.enum(["full", "split"]),
+);
+
+const SowFormSchema = z.object({
   title: z.string().trim().min(1, "A title is required."),
   event_id: optionalUuid,
   contact_id: optionalUuid,
   company_id: optionalUuid,
   signer_name: optionalText,
   signer_email: optionalText,
+  // #1
   event_title: z.string().trim().min(1, "An event title is required."),
   event_date: optionalDate,
   start_at: optionalPacificDateTime,
@@ -260,21 +268,26 @@ const CreateSowSchema = z.object({
   guest_count: optionalInt,
   client_name: optionalText,
   client_company: optionalText,
+  // #2
+  package_name: optionalText,
+  camera_type: z.preprocess(
+    (v) => (v === "digital" || v === "360" ? v : v === "standard" ? "standard" : null),
+    z.enum(["standard", "digital", "360"]).nullable(),
+  ),
+  service_hours: optionalInt,
+  setup_note: optionalText,
+  // #3
+  total: optionalMoney,
+  payment_structure: paymentStructureSchema,
+  deposit_amount: optionalMoney,
   notes: optionalText,
 });
 
-/**
- * Create a customer Statement of Work from the builder form. Snapshots the event
- * details + agreed scope lines into the document payload and redirects to the
- * new document (where the team sends it for signature).
- */
-export async function createSow(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  await requireEdit("documents");
+type SowFormData = z.infer<typeof SowFormSchema>;
 
-  const parsed = CreateSowSchema.safeParse({
+/** Pull the SOW builder fields out of a submitted form (shared create/update). */
+function sowFieldsFrom(formData: FormData) {
+  return {
     title: formData.get("title"),
     event_id: formData.get("event_id"),
     contact_id: formData.get("contact_id"),
@@ -289,30 +302,38 @@ export async function createSow(
     guest_count: formData.get("guest_count"),
     client_name: formData.get("client_name"),
     client_company: formData.get("client_company"),
+    package_name: formData.get("package_name"),
+    camera_type: formData.get("camera_type"),
+    service_hours: formData.get("service_hours"),
+    setup_note: formData.get("setup_note"),
+    total: formData.get("total"),
+    payment_structure: formData.get("payment_structure"),
+    deposit_amount: formData.get("deposit_amount"),
     notes: formData.get("notes"),
-  });
-  if (!parsed.success) return { error: firstError(parsed.error) };
+  };
+}
 
-  let rawItems: unknown;
+/** Parse the inclusions JSON hidden field; null on malformed input. */
+function parseInclusions(raw: FormDataEntryValue | null): SowInclusion[] | null {
+  let value: unknown;
   try {
-    rawItems = JSON.parse(String(formData.get("scope_items") ?? "[]"));
+    value = JSON.parse(String(raw ?? "[]"));
   } catch {
-    return { error: "Could not read the scope items." };
+    return null;
   }
-  const itemsParsed = z.array(ScopeItemSchema).safeParse(rawItems);
-  if (!itemsParsed.success) {
-    return { error: "Each scope line needs a description, quantity, and amount." };
-  }
-  const items: SowScopeItem[] = itemsParsed.data
-    .filter((i) => i.description.trim() !== "")
-    .map((i) => ({
-      description: i.description.trim(),
-      quantity: i.quantity,
-      amount: Math.round((i.amount + Number.EPSILON) * 100) / 100,
-    }));
+  const res = z.array(InclusionSchema).safeParse(value);
+  if (!res.success) return null;
+  return res.data
+    .map((i) => ({ label: i.label.trim(), detail: i.detail.trim() }))
+    .filter((i) => i.label !== "");
+}
 
-  const data = parsed.data;
-  const payload: SowPayload = {
+/** Assemble the immutable SOW payload snapshot from validated form data. */
+function buildSowPayload(
+  data: SowFormData,
+  inclusions: SowInclusion[],
+): SowPayload {
+  return {
     companyName: "Elite Events LA",
     eventTitle: data.event_title,
     eventDate: data.event_date,
@@ -322,10 +343,42 @@ export async function createSow(
     guestCount: data.guest_count,
     clientName: data.client_name,
     clientCompany: data.client_company,
-    scopeItems: items,
+    packageName: data.package_name ?? DEFAULT_PACKAGE_NAME,
+    cameraType: data.camera_type,
+    serviceHours: data.service_hours,
+    inclusions,
+    setupNote: data.setup_note,
+    total: data.total ?? 0,
+    paymentStructure: data.payment_structure,
+    depositAmount: data.deposit_amount,
+    mediaRelease: null,
     notes: data.notes,
-    total: sowTotal(items),
   };
+}
+
+/**
+ * Create a customer Statement of Work from the builder form. Snapshots the event
+ * details, package inclusions, and pricing into the document payload as a DRAFT,
+ * then redirects to the document where the team previews and sends it. The client
+ * makes the media-release election at signing (payload.mediaRelease starts null).
+ */
+export async function createSow(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("documents");
+
+  const parsed = SowFormSchema.safeParse(sowFieldsFrom(formData));
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const inclusions = parseInclusions(formData.get("inclusions"));
+  if (inclusions == null) return { error: "Each inclusion needs a label." };
+  const finalInclusions = inclusions.length
+    ? inclusions
+    : standardBoothInclusions();
+
+  const data = parsed.data;
+  const payload = buildSowPayload(data, finalInclusions);
 
   const user = await getUser();
   const supabase = await createClient();
@@ -358,6 +411,81 @@ export async function createSow(
   revalidatePath("/documents");
   // redirect() throws to navigate — keep it outside any try/catch.
   redirect(`/documents/${doc.id}`);
+}
+
+const UpdateSowSchema = SowFormSchema.extend({
+  id: z.uuid("A document is required."),
+});
+
+/**
+ * Edit a DRAFT customer SOW in place (re-snapshot its payload). Only drafts are
+ * editable — a sent or signed SOW is immutable, so it must be voided and
+ * recreated to change. Redirects back to the document on success.
+ */
+export async function updateSow(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("documents");
+
+  const parsed = UpdateSowSchema.safeParse({
+    id: formData.get("id"),
+    ...sowFieldsFrom(formData),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const inclusions = parseInclusions(formData.get("inclusions"));
+  if (inclusions == null) return { error: "Each inclusion needs a label." };
+  const finalInclusions = inclusions.length
+    ? inclusions
+    : standardBoothInclusions();
+
+  const data = parsed.data;
+  const supabase = await createClient();
+
+  const { data: existing } = await supabase
+    .from("documents")
+    .select("id, kind, status")
+    .eq("id", data.id)
+    .maybeSingle();
+  if (!existing) return { error: "Document not found." };
+  if (existing.kind !== "customer_sow") {
+    return { error: "That document isn't a statement of work." };
+  }
+  if (existing.status !== "draft") {
+    return {
+      error:
+        "Only a draft SOW can be edited. Void this one and create a new SOW to change a document that's already been sent.",
+    };
+  }
+
+  const payload = buildSowPayload(data, finalInclusions);
+  const { error } = await supabase
+    .from("documents")
+    .update({
+      title: data.title,
+      event_id: data.event_id,
+      contact_id: data.contact_id,
+      company_id: data.company_id,
+      signer_name: data.signer_name,
+      signer_email: data.signer_email,
+      payload,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", data.id);
+  if (error) return { error: error.message };
+
+  const user = await getUser();
+  await supabase.from("document_audit").insert({
+    document_id: data.id,
+    event: "edited",
+    actor: user?.email ?? "system",
+  });
+
+  revalidatePath("/documents");
+  revalidatePath(`/documents/${data.id}`);
+  // redirect() throws to navigate — keep it outside any try/catch.
+  redirect(`/documents/${data.id}`);
 }
 
 const IdSchema = z.object({ id: z.uuid("A document is required.") });
@@ -556,6 +684,9 @@ export async function signDocument(
     updated_at: signedAt,
   };
 
+  // The SOW media-release election (#5) is made by the client here, at signing.
+  let sowMediaConsent: boolean | null = null;
+
   try {
     if (doc.kind === "affiliate_contract") {
       const payload: ContractPayload = {
@@ -589,7 +720,18 @@ export async function signDocument(
       updates.content_hash = contentHash;
       updates.storage_path = storagePath;
     } else if (doc.kind === "customer_sow") {
-      const payload = doc.payload as SowPayload;
+      // The client must elect their media-release preference to sign a SOW (#5).
+      const mediaRaw = String(formData.get("media_release") ?? "");
+      if (mediaRaw !== "yes" && mediaRaw !== "no") {
+        return {
+          error: "Please choose Yes or No for the media release before signing.",
+        };
+      }
+      sowMediaConsent = mediaRaw === "yes";
+      const payload: SowPayload = {
+        ...(doc.payload as SowPayload),
+        mediaRelease: sowMediaConsent,
+      };
       const contentHash = createHash("sha256")
         .update(sowCanonicalText(payload))
         .digest("hex");
@@ -611,6 +753,7 @@ export async function signDocument(
           upsert: true,
         });
       if (upErr) return { error: "Could not store the signed document." };
+      updates.payload = payload;
       updates.content_hash = contentHash;
       updates.storage_path = storagePath;
     } else {
@@ -640,6 +783,23 @@ export async function signDocument(
       content_hash: updates.content_hash ?? null,
     },
   });
+
+  // Denormalize the client's media-release election onto their contact profile so
+  // sales/ops see the standing preference and onsite crew know whether they may
+  // capture and share images. Written via the token-scoped service-role client.
+  if (doc.kind === "customer_sow" && doc.contact_id && sowMediaConsent !== null) {
+    await db
+      .from("contacts")
+      .update({
+        media_release_consent: sowMediaConsent,
+        media_release_recorded_at: signedAt,
+        media_release_document_id: doc.id,
+      })
+      .eq("id", doc.contact_id);
+    revalidatePath(`/crm/contacts/${doc.contact_id}`);
+    revalidatePath("/operations/scheduling");
+    if (doc.event_id) revalidatePath(`/events/${doc.event_id}`);
+  }
 
   revalidatePath("/documents");
   revalidatePath(`/documents/${doc.id}`);

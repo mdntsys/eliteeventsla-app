@@ -412,6 +412,9 @@ export type Database = {
           first_name: string
           id: string
           last_name: string | null
+          media_release_consent: boolean | null
+          media_release_document_id: string | null
+          media_release_recorded_at: string | null
           notes: string | null
           owner_id: string | null
           phone: string | null
@@ -427,6 +430,9 @@ export type Database = {
           first_name: string
           id?: string
           last_name?: string | null
+          media_release_consent?: boolean | null
+          media_release_document_id?: string | null
+          media_release_recorded_at?: string | null
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
@@ -442,6 +448,9 @@ export type Database = {
           first_name?: string
           id?: string
           last_name?: string | null
+          media_release_consent?: boolean | null
+          media_release_document_id?: string | null
+          media_release_recorded_at?: string | null
           notes?: string | null
           owner_id?: string | null
           phone?: string | null
@@ -462,6 +471,13 @@ export type Database = {
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_media_release_document_id_fkey"
+            columns: ["media_release_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
             referencedColumns: ["id"]
           },
           {
