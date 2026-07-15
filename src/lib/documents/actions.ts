@@ -8,7 +8,11 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getUser, requireEdit } from "@/lib/auth/dal";
-import { sendEmail } from "@/lib/email/send";
+import {
+  sendEmail,
+  notifySowSignedToClient,
+  notifySowSignedInternal,
+} from "@/lib/email/send";
 import { signatureRequestEmail } from "@/lib/email/templates";
 import {
   buildAffiliateContractPayload,
@@ -686,6 +690,8 @@ export async function signDocument(
 
   // The SOW media-release election (#5) is made by the client here, at signing.
   let sowMediaConsent: boolean | null = null;
+  // Executed SOW PDF, kept to attach to the client's copy email.
+  let sowPdf: Buffer | null = null;
 
   try {
     if (doc.kind === "affiliate_contract") {
@@ -753,6 +759,7 @@ export async function signDocument(
           upsert: true,
         });
       if (upErr) return { error: "Could not store the signed document." };
+      sowPdf = pdf;
       updates.payload = payload;
       updates.content_hash = contentHash;
       updates.storage_path = storagePath;
@@ -801,8 +808,37 @@ export async function signDocument(
     if (doc.event_id) revalidatePath(`/events/${doc.event_id}`);
   }
 
+  // On a signed SOW: email the client their executed copy (PDF attached) for
+  // their records, and notify the internal sales team. Both fire-and-forget.
+  if (doc.kind === "customer_sow") {
+    const finalPayload = updates.payload as SowPayload;
+    await notifySowSignedToClient(
+      doc.signer_email,
+      { recipientName: doc.signer_name, documentTitle: doc.title },
+      sowPdf ? [{ filename: "Statement-of-Work.pdf", content: sowPdf }] : undefined,
+    );
+    await notifySowSignedInternal({
+      documentId: doc.id,
+      documentTitle: doc.title,
+      signerName: signatureName,
+      signerEmail: doc.signer_email,
+      eventTitle: finalPayload?.eventTitle ?? null,
+      mediaRelease: sowMediaConsent,
+      signedAt,
+    });
+  }
+
   revalidatePath("/documents");
   revalidatePath(`/documents/${doc.id}`);
+
+  // Public token flows pass a thank-you path — redirect there so the signer sees
+  // a confirmation instead of a 404 (the token is now consumed). redirect()
+  // throws to navigate, so it must stay outside any try/catch. Portal signing
+  // sends no complete_href and falls through to the inline success state.
+  const completeHref = String(formData.get("complete_href") ?? "");
+  if (/^\/[A-Za-z0-9/_-]*$/.test(completeHref)) {
+    redirect(completeHref);
+  }
   return { success: true };
 }
 

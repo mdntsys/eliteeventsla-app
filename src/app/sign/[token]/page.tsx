@@ -71,6 +71,7 @@ export default async function PublicSignPage({
               <SignForm
                 token={token}
                 signerName={doc.signer_name}
+                completeHref="/sign/thank-you"
                 requireMediaRelease={doc.kind === "customer_sow"}
               />
             </>

@@ -155,9 +155,21 @@ export default async function DocumentDetailPage({
         )}
 
         <section className="flex flex-col gap-3">
-          <h2 className="font-display text-lg font-light text-navy">
-            Audit trail
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-lg font-light text-navy">
+              Audit trail
+            </h2>
+            {signedUrl && (
+              <a
+                href={signedUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 rounded-(--radius-card) border border-line px-4 py-2 text-sm font-medium text-navy transition hover:border-navy"
+              >
+                View signed agreement (PDF)
+              </a>
+            )}
+          </div>
           {audit.length === 0 ? (
             <p className="rounded-(--radius-card) border border-dashed border-line bg-cream px-4 py-8 text-center text-sm text-muted">
               No activity recorded yet.

@@ -16,12 +16,19 @@ export function SignForm({
   token,
   signerName,
   continueHref,
+  completeHref,
   requireMediaRelease = false,
 }: {
   token: string;
   signerName: string | null;
   /** When set (the affiliate portal), show a link into the app after signing. */
   continueHref?: string;
+  /**
+   * Public token flows: the server redirects here after signing so the signer
+   * sees a thank-you page instead of a consumed-token 404. Omit in the portal,
+   * which shows the inline success state + continue link.
+   */
+  completeHref?: string;
   /** SOWs (#5): the client must elect Yes/No for the media release to sign. */
   requireMediaRelease?: boolean;
 }) {
@@ -49,6 +56,9 @@ export function SignForm({
   return (
     <form action={action} className="mt-8 border-t border-line pt-6">
       <input type="hidden" name="token" value={token} />
+      {completeHref && (
+        <input type="hidden" name="complete_href" value={completeHref} />
+      )}
 
       {requireMediaRelease && (
         <fieldset className="mb-6">

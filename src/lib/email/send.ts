@@ -11,6 +11,8 @@ import {
   invoiceVoidedEmail,
   commissionEarnedEmail,
   payoutRecordedEmail,
+  sowSignedClientEmail,
+  sowSignedInternalEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -223,4 +225,58 @@ export async function notifyPayoutRecorded(
   },
 ): Promise<void> {
   await fire(to, payoutRecordedEmail({ ...p, portalUrl: portalUrl() }));
+}
+
+/** The app base URL for internal links in staff emails. */
+function appBaseUrl(): string {
+  return (process.env.APP_URL ?? "https://app.eliteeventsla.com").replace(
+    /\/$/,
+    "",
+  );
+}
+
+/**
+ * Internal recipients for "SOW signed" notifications. Defaults to the sales
+ * team; override with SOW_NOTIFY_TO (comma-separated), or SOW_NOTIFY_TO="" to
+ * disable the internal notice.
+ */
+export function getSowNotifyRecipients(): string[] {
+  const raw = process.env.SOW_NOTIFY_TO;
+  const value = raw === undefined ? "sales@eliteeventsla.com" : raw;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Email the client a copy of their signed SOW (PDF attached) for their records.
+ * Fire-and-forget — swallows its own errors so signing never breaks.
+ */
+export async function notifySowSignedToClient(
+  to: string | null | undefined,
+  p: { recipientName?: string | null; documentTitle: string },
+  attachments?: EmailAttachment[],
+): Promise<void> {
+  if (!to) return;
+  await sendEmail({ to, ...sowSignedClientEmail(p), attachments });
+}
+
+/**
+ * Notify the internal sales team that a customer SOW was signed, with a link to
+ * the document. Fire-and-forget — swallows its own errors.
+ */
+export async function notifySowSignedInternal(p: {
+  documentId: string;
+  documentTitle: string;
+  signerName: string;
+  signerEmail?: string | null;
+  eventTitle?: string | null;
+  mediaRelease?: boolean | null;
+  signedAt?: string | null;
+}): Promise<void> {
+  const to = getSowNotifyRecipients();
+  if (to.length === 0) return;
+  const documentUrl = `${appBaseUrl()}/documents/${p.documentId}`;
+  await sendEmail({ to, ...sowSignedInternalEmail({ ...p, documentUrl }) });
 }

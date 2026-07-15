@@ -212,6 +212,51 @@ export function signatureRequestEmail(p: {
   return { subject: `Please sign: ${p.documentTitle}`, html, text };
 }
 
+/** To the client after they sign their SOW — a copy is attached for their records. */
+export function sowSignedClientEmail(p: {
+  recipientName?: string | null;
+  documentTitle: string;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const html = layout("Your signed Statement of Work", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Thank you — your signature on <strong>${p.documentTitle}</strong> has been recorded. A copy of the fully executed agreement is attached to this email for your records.</p>
+    <p ${P}>If you have any questions, just reply to this email and we'll be glad to help.</p>
+    <p ${P}>Thank you for choosing Elite Events LA.</p>`);
+  const text = `${hi}\n\nThank you — your signature on ${p.documentTitle} has been recorded. A copy of the fully executed agreement is attached to this email for your records.\n\nIf you have any questions, just reply to this email.\n\nThank you for choosing Elite Events LA.`;
+  return { subject: `Signed: ${p.documentTitle}`, html, text };
+}
+
+/** To the internal sales team when a customer signs a SOW. */
+export function sowSignedInternalEmail(p: {
+  documentTitle: string;
+  documentUrl: string;
+  signerName: string;
+  signerEmail?: string | null;
+  eventTitle?: string | null;
+  mediaRelease?: boolean | null;
+  signedAt?: string | null;
+}): RenderedEmail {
+  const when = formatDate(p.signedAt);
+  const media =
+    p.mediaRelease == null
+      ? "not specified"
+      : p.mediaRelease
+        ? "YES — may use & share event media"
+        : "NO — keep media private";
+  const button = `<a href="${p.documentUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;">Open the document →</a>`;
+  const html = layout("A Statement of Work was signed", `
+    <p ${P}>Heads up — a customer just signed their Statement of Work.</p>
+    <p ${META}>Document: <strong>${p.documentTitle}</strong></p>
+    ${p.eventTitle ? `<p ${META}>Event: <strong>${p.eventTitle}</strong></p>` : ""}
+    <p ${META}>Signed by: <strong>${p.signerName}</strong>${p.signerEmail ? ` (${p.signerEmail})` : ""}</p>
+    ${when ? `<p ${META}>Signed: <strong>${when}</strong></p>` : ""}
+    <p ${META}>Media release: <strong>${media}</strong></p>
+    <p style="margin:18px 0;">${button}</p>`);
+  const text = `A customer just signed their Statement of Work.\n\nDocument: ${p.documentTitle}\n${p.eventTitle ? `Event: ${p.eventTitle}\n` : ""}Signed by: ${p.signerName}${p.signerEmail ? ` (${p.signerEmail})` : ""}\n${when ? `Signed: ${when}\n` : ""}Media release: ${media}\n\nOpen the document: ${p.documentUrl}`;
+  return { subject: `SOW signed: ${p.documentTitle}`, html, text };
+}
+
 export function affiliateWelcomeEmail(p: {
   fullName?: string | null;
   email: string;
