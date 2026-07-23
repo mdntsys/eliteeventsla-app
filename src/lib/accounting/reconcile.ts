@@ -86,6 +86,22 @@ export async function reconcileInvoiceAndActivateEvent(
     .update({ amount_paid: paid, status })
     .eq("id", invoiceId);
 
+  // Once the invoice is settled, any hosted-checkout attempt still sitting at
+  // 'pending' is an abandoned tab — Stripe never sends a completion event for
+  // one, so it would otherwise read as outstanding money forever beside the
+  // payment that actually landed. Only rows that never reached a charge (no
+  // intent) are retired; a pending row WITH an intent is a real charge still
+  // settling. Cosmetic by construction: amount_paid counts 'succeeded' only.
+  if (status === "paid" || status === "void") {
+    await supabase
+      .from("payments")
+      .update({ status: "cancelled" })
+      .eq("invoice_id", invoiceId)
+      .eq("method", "stripe")
+      .eq("status", "pending")
+      .is("stripe_payment_intent_id", null);
+  }
+
   // Activate the linked event on first money in: a deposit (or full payment)
   // confirms a tentative (draft) booking. Never downgrades a further-along event.
   // A voided invoice never activates its event — the booking is cancelled, so a

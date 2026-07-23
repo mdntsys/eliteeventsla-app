@@ -41,6 +41,8 @@ const PAYMENT_STYLES: Record<PaymentStatus, string> = {
   succeeded: "border-green-200 bg-green-50 text-green-700",
   failed: "border-red-200 bg-red-50 text-red-700",
   refunded: "border-line bg-cream-deep text-muted",
+  // Muted, not red: an abandoned checkout isn't a failure, it's a non-event.
+  cancelled: "border-line bg-cream-deep text-muted",
 };
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
@@ -49,6 +51,7 @@ const PAYMENT_LABELS: Record<PaymentStatus, string> = {
   succeeded: "Succeeded",
   failed: "Failed",
   refunded: "Refunded",
+  cancelled: "Abandoned",
 };
 
 export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {

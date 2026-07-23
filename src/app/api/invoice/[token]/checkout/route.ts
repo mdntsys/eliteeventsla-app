@@ -116,16 +116,39 @@ export async function POST(
     });
 
     const db = createServiceClient();
-    await db.from("payments").insert({
-      invoice_id: invoice.id,
+
+    // Re-point the invoice's existing in-flight attempt at the new session
+    // instead of stacking another row. A payer who opens checkout, backs out,
+    // and tries again used to leave a permanent "Pending" row behind for every
+    // attempt, so a fully-paid invoice could still read as money owed. Only a
+    // row that never reached a charge (no intent) is reusable — one that has an
+    // intent is a real payment in progress and must be left alone.
+    const { data: reusable } = await db
+      .from("payments")
+      .select("id")
+      .eq("invoice_id", invoice.id)
+      .eq("method", "stripe")
+      .eq("status", "pending")
+      .is("stripe_payment_intent_id", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const attempt = {
       event_id: invoice.event_id,
       amount: invoice.balance,
       currency: "usd",
-      method: "stripe",
-      status: "pending",
+      method: "stripe" as const,
+      status: "pending" as const,
       stripe_checkout_session_id: session.id,
       notes: "Stripe checkout (invoice page)",
-    });
+    };
+
+    if (reusable) {
+      await db.from("payments").update(attempt).eq("id", reusable.id);
+    } else {
+      await db.from("payments").insert({ invoice_id: invoice.id, ...attempt });
+    }
 
     if (!session.url) return NextResponse.redirect(`${back}?error=checkout`, 303);
     return NextResponse.redirect(session.url, 303);

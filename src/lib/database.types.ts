@@ -2249,6 +2249,7 @@ export type Database = {
         | "succeeded"
         | "failed"
         | "refunded"
+        | "cancelled"
       quote_status:
         | "draft"
         | "sent"
@@ -2442,6 +2443,7 @@ export const Constants = {
         "succeeded",
         "failed",
         "refunded",
+        "cancelled",
       ],
       quote_status: [
         "draft",

@@ -125,6 +125,22 @@ async function handleEvent(supabase: SupabaseClient, event: Stripe.Event) {
       await reconcileInvoices(supabase, invoiceIds);
       break;
     }
+    case "checkout.session.expired": {
+      // The payer opened checkout and never finished; Stripe expires the
+      // session ~24h later. Retire the pending row so it stops reading as
+      // money owed. Guarded on status so a session that somehow completed
+      // first can't be walked backwards.
+      // No reconcile needed: a pending attempt was never counted toward
+      // amount_paid, so retiring it cannot change the invoice's balance.
+      const session = event.data.object as Stripe.Checkout.Session;
+      const { error } = await supabase
+        .from("payments")
+        .update({ status: "cancelled" })
+        .eq("stripe_checkout_session_id", session.id)
+        .eq("status", "pending");
+      if (error) throw error;
+      break;
+    }
     case "payment_intent.succeeded": {
       const intent = event.data.object as Stripe.PaymentIntent;
       const invoiceIds = await markPayments(
