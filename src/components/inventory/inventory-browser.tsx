@@ -6,6 +6,7 @@ import type { EventOption } from "@/lib/events/types";
 import type { LocationOption } from "@/lib/locations/types";
 import { InventoryTable } from "@/components/inventory/inventory-table";
 import { BulkLocationBar } from "@/components/inventory/bulk-location-bar";
+import { BulkKitBar } from "@/components/inventory/bulk-kit-bar";
 import { SearchField } from "@/components/shared/search-field";
 
 function haystack(row: InventoryListRow): string {
@@ -23,10 +24,13 @@ export function InventoryBrowser({
   rows,
   events,
   locationOptions,
+  kitOptions = [],
 }: {
   rows: InventoryListRow[];
   events: EventOption[];
   locationOptions: LocationOption[];
+  /** Bundles a selection can be dropped into (empty ⇒ the bar is hidden). */
+  kitOptions?: { id: string; label: string }[];
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -78,11 +82,18 @@ export function InventoryBrowser({
       </div>
 
       {selectedIds.length > 0 && (
-        <BulkLocationBar
-          selectedIds={selectedIds}
-          locationOptions={locationOptions}
-          onAssigned={clearSelection}
-        />
+        <div className="flex flex-col gap-2">
+          <BulkLocationBar
+            selectedIds={selectedIds}
+            locationOptions={locationOptions}
+            onAssigned={clearSelection}
+          />
+          <BulkKitBar
+            selectedIds={selectedIds}
+            kitOptions={kitOptions}
+            onAssigned={clearSelection}
+          />
+        </div>
       )}
 
       {filtered.length === 0 ? (

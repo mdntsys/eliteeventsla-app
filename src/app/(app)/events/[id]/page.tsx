@@ -12,6 +12,8 @@ import {
   getEventCrewConflicts,
 } from "@/lib/events/queries";
 import { listInventory } from "@/lib/inventory/queries";
+import { listActiveKits } from "@/lib/inventory/kits";
+import { kitLocationLabel } from "@/lib/inventory/kit-types";
 import { listEventVendors, listVendorsForPicker } from "@/lib/vendors/queries";
 import { listEventTickets } from "@/lib/servicing/queries";
 import {
@@ -139,12 +141,22 @@ export default async function EventDetailPage({
   const canViewAffiliates = canView(profile, "affiliates");
   const canEditAffiliates = canEdit(profile, "affiliates");
 
-  const [ev, staff, crew, inventory] = await Promise.all([
+  const [ev, staff, crew, inventory, activeKits] = await Promise.all([
     getEvent(id),
     listStaff(),
     listCrew(),
     listInventory(),
+    listActiveKits(),
   ]);
+
+  // Bundles offered in the "reserve a bundle" picker, with where each pallet
+  // lives so the picker reads like the pick instruction it becomes.
+  const kitOptions = activeKits.map((kit) => ({
+    id: kit.id,
+    name: kit.name,
+    line_count: kit.line_count,
+    location_label: kitLocationLabel(kit),
+  }));
 
   if (!ev) notFound();
 
@@ -325,6 +337,7 @@ export default async function EventDetailPage({
           ev={ev}
           availabilityByItem={availabilityByItem}
           inventory={inventory}
+          kits={kitOptions}
         />
 
         <TimelinePanel

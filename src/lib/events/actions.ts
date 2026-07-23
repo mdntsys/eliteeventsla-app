@@ -356,6 +356,196 @@ export async function reserveItem(
   return { success: true };
 }
 
+const ReserveKitSchema = z
+  .object({
+    event_id: z.uuid("An event is required."),
+    kit_id: z.uuid("Pick a bundle."),
+    reserved_from: optionalTimestamp,
+    reserved_to: optionalTimestamp,
+  })
+  .refine(
+    (d) =>
+      !d.reserved_from ||
+      !d.reserved_to ||
+      new Date(d.reserved_from) <= new Date(d.reserved_to),
+    { message: "The reserve window must start before it ends." },
+  );
+
+/**
+ * Reserve a whole inventory bundle onto an event in one action — "take Photo
+ * Booth A" instead of reserving thirty items by hand.
+ *
+ * The bundle is EXPLODED into ordinary `event_items` rows, so availability
+ * maths, the double-booking EXCLUDE guard, the pick list, and check-out/return
+ * all keep working exactly as they do for a hand-reserved item.
+ *
+ * Partial by design: it books whatever is free and reports what it couldn't
+ * get, rather than refusing the lot because one box of props is short. For bulk
+ * lines that means computing what's already committed over an OVERLAPPING
+ * window; for a pinned serialized unit it means letting the database's own
+ * exclusion constraint reject the clash (23P01) and counting it as a gap.
+ */
+export async function reserveKit(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("inventory");
+
+  const parsed = ReserveKitSchema.safeParse({
+    event_id: formData.get("event_id"),
+    kit_id: formData.get("kit_id"),
+    reserved_from: formData.get("reserved_from"),
+    reserved_to: formData.get("reserved_to"),
+  });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { event_id, kit_id, reserved_from, reserved_to } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: kit, error: kitError } = await supabase
+    .from("inventory_kits")
+    .select("id, name")
+    .eq("id", kit_id)
+    .maybeSingle();
+  if (kitError) return { error: kitError.message };
+  if (!kit) return { error: "That bundle no longer exists." };
+
+  const { data: lineData, error: lineError } = await supabase
+    .from("inventory_kit_items")
+    .select(
+      "item_id, unit_id, quantity, inventory_items(name, kind, quantity, daily_rate)",
+    )
+    .eq("kit_id", kit_id);
+  if (lineError) return { error: lineError.message };
+
+  type Line = {
+    item_id: string;
+    unit_id: string | null;
+    quantity: number;
+    inventory_items: {
+      name: string;
+      kind: "bulk" | "serialized";
+      quantity: number;
+      daily_rate: number | null;
+    } | null;
+  };
+  const lines = (lineData ?? []) as unknown as Line[];
+  if (lines.length === 0) {
+    return { error: `"${kit.name}" is empty — add items to it first.` };
+  }
+
+  // What's already spoken for on these items over a window that OVERLAPS the
+  // one being requested. Two windows overlap when each starts before the other
+  // ends; a null bound is open-ended, so it overlaps everything on that side.
+  const itemIds = Array.from(new Set(lines.map((l) => l.item_id)));
+  const { data: existingData, error: existingError } = await supabase
+    .from("event_items")
+    .select("inventory_item_id, unit_id, quantity, reserved_from, reserved_to")
+    .in("inventory_item_id", itemIds)
+    .is("returned_at", null);
+  if (existingError) return { error: existingError.message };
+
+  const wantFrom = reserved_from ? new Date(reserved_from).getTime() : -Infinity;
+  const wantTo = reserved_to ? new Date(reserved_to).getTime() : Infinity;
+
+  type Existing = {
+    inventory_item_id: string;
+    unit_id: string | null;
+    quantity: number | null;
+    reserved_from: string | null;
+    reserved_to: string | null;
+  };
+
+  const committed = new Map<string, number>();
+  for (const row of (existingData ?? []) as Existing[]) {
+    const from = row.reserved_from
+      ? new Date(row.reserved_from).getTime()
+      : -Infinity;
+    const to = row.reserved_to ? new Date(row.reserved_to).getTime() : Infinity;
+    if (from < wantTo && wantFrom < to) {
+      committed.set(
+        row.inventory_item_id,
+        (committed.get(row.inventory_item_id) ?? 0) + (row.quantity ?? 1),
+      );
+    }
+  }
+
+  const gaps: string[] = [];
+  let reservedLines = 0;
+
+  for (const line of lines) {
+    const name = line.inventory_items?.name ?? "Item";
+    const rate = line.inventory_items?.daily_rate ?? null;
+
+    if (line.unit_id) {
+      // Serialized: let the database's exclusion constraint be the referee.
+      const { error } = await supabase.from("event_items").insert({
+        event_id,
+        inventory_item_id: line.item_id,
+        unit_id: line.unit_id,
+        quantity: 1,
+        rate,
+        reserved_from,
+        reserved_to,
+      });
+      if (error) {
+        if (pgCode(error) === "23P01") {
+          gaps.push(`${name} — already booked for an overlapping window`);
+          continue;
+        }
+        return { error: error.message };
+      }
+      reservedLines += 1;
+      continue;
+    }
+
+    const onHand = line.inventory_items?.quantity ?? 0;
+    const free = Math.max(0, onHand - (committed.get(line.item_id) ?? 0));
+    const take = Math.min(line.quantity, free);
+
+    if (take <= 0) {
+      gaps.push(`${name} — need ${line.quantity}, none free`);
+      continue;
+    }
+
+    const { error } = await supabase.from("event_items").insert({
+      event_id,
+      inventory_item_id: line.item_id,
+      quantity: take,
+      rate,
+      reserved_from,
+      reserved_to,
+    });
+    if (error) return { error: error.message };
+
+    // Count what this reservation just consumed, so two lines pointing at the
+    // same item inside one bundle can't both claim the same stock.
+    committed.set(line.item_id, (committed.get(line.item_id) ?? 0) + take);
+    reservedLines += 1;
+
+    if (take < line.quantity) {
+      gaps.push(`${name} — reserved ${take} of ${line.quantity}`);
+    }
+  }
+
+  revalidatePath(`/events/${event_id}`);
+  revalidatePath("/operations/inventory");
+
+  if (reservedLines === 0) {
+    return {
+      error: `Nothing in "${kit.name}" is available for that window. ${gaps.join("; ")}`,
+    };
+  }
+
+  return {
+    success: true,
+    warning:
+      gaps.length > 0
+        ? `Reserved "${kit.name}" with ${gaps.length} gap${gaps.length === 1 ? "" : "s"}: ${gaps.join("; ")}`
+        : undefined,
+  };
+}
+
 export async function removeEventItem(
   _prev: ActionState,
   formData: FormData,

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireView } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { listInventory, listCategories } from "@/lib/inventory/queries";
+import { listKitOptions } from "@/lib/inventory/kits";
 import { listLocationOptions } from "@/lib/locations/queries";
 import { listEventOptions } from "@/lib/events/queries";
 import { InventoryBrowser } from "@/components/inventory/inventory-browser";
@@ -15,12 +16,14 @@ export const metadata: Metadata = { title: "Inventory" };
 export default async function InventoryPage() {
   await requireView("inventory");
 
-  const [rows, categories, locationOptions, events] = await Promise.all([
-    listInventory(),
-    listCategories(),
-    listLocationOptions(),
-    listEventOptions(),
-  ]);
+  const [rows, categories, locationOptions, events, kitOptions] =
+    await Promise.all([
+      listInventory(),
+      listCategories(),
+      listLocationOptions(),
+      listEventOptions(),
+      listKitOptions(),
+    ]);
 
   return (
     <>
@@ -29,12 +32,20 @@ export default async function InventoryPage() {
         title="Inventory"
         description="Equipment and machines — bulk stock by quantity plus individually tracked serialized units, with availability and maintenance."
         action={
-          <Link
-            href="/operations/inventory/locations"
-            className="rounded-(--radius-card) border border-line bg-cream px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-card"
-          >
-            Manage locations
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/operations/inventory/kits"
+              className="rounded-(--radius-card) border border-line bg-cream px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-card"
+            >
+              Bundles
+            </Link>
+            <Link
+              href="/operations/inventory/locations"
+              className="rounded-(--radius-card) border border-line bg-cream px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-card"
+            >
+              Manage locations
+            </Link>
+          </div>
         }
       />
 
@@ -54,6 +65,7 @@ export default async function InventoryPage() {
             rows={rows}
             events={events}
             locationOptions={locationOptions}
+            kitOptions={kitOptions}
           />
         </div>
       )}

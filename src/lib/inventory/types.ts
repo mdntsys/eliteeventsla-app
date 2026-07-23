@@ -59,4 +59,11 @@ export type InventoryItemDetail = InventoryItem & {
 };
 
 /** Return shape for every server action (useActionState compatible). */
-export type ActionState = { error?: string; success?: boolean } | undefined;
+export type ActionState =
+  | {
+      error?: string;
+      success?: boolean;
+      /** Succeeded, but with something worth saying (e.g. items skipped). */
+      warning?: string;
+    }
+  | undefined;

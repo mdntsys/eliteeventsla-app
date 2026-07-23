@@ -158,4 +158,14 @@ export type Availability = {
 
 // --- Action state -----------------------------------------------------------
 
-export type ActionState = { error?: string; success?: boolean } | undefined;
+export type ActionState =
+  | {
+      error?: string;
+      success?: boolean;
+      /**
+       * A partial success worth showing: reserving a bundle books whatever is
+       * free and reports what it couldn't get, rather than failing outright.
+       */
+      warning?: string;
+    }
+  | undefined;

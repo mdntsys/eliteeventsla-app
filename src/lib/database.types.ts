@@ -1210,6 +1210,122 @@ export type Database = {
           },
         ]
       }
+      inventory_kit_items: {
+        Row: {
+          created_at: string
+          id: string
+          item_id: string
+          kit_id: string
+          notes: string | null
+          quantity: number
+          unit_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          item_id: string
+          kit_id: string
+          notes?: string | null
+          quantity?: number
+          unit_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          item_id?: string
+          kit_id?: string
+          notes?: string | null
+          quantity?: number
+          unit_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_kit_items_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_kit_items_kit_id_fkey"
+            columns: ["kit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_kits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_kit_items_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_kits: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          location_id: string | null
+          name: string
+          row_id: string | null
+          section: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+          name: string
+          row_id?: string | null
+          section?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          location_id?: string | null
+          name?: string
+          row_id?: string | null
+          section?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_kits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_kits_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_kits_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "warehouse_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_units: {
         Row: {
           acquired_on: string | null

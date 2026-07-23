@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import {
   reserveItem,
+  reserveKit,
   removeEventItem,
   checkOutItem,
   checkOutAllItems,
@@ -14,6 +15,7 @@ import type {
   EventItemRow,
 } from "@/lib/events/types";
 import type { InventoryListRow } from "@/lib/inventory/types";
+import type { KitOption } from "@/lib/inventory/kit-types";
 
 /**
  * INVENTORY surface for the event hub. Shows reserved line items with their
@@ -210,6 +212,122 @@ function CheckOutAllButton({
   );
 }
 
+/* ── Reserve a whole bundle ──────────────────────────────────────────── */
+
+/**
+ * "Take Photo Booth A" — reserves an entire pallet in one action instead of
+ * picking its items one at a time. Partial by design: it books whatever is free
+ * over the job window and reports the gaps, so one short box of props doesn't
+ * block the rest of the load.
+ */
+function ReserveKitForm({
+  eventId,
+  kits,
+  defaultFrom,
+  defaultTo,
+}: {
+  eventId: string;
+  kits: KitOption[];
+  defaultFrom: string;
+  defaultTo: string;
+}) {
+  const [state, action, pending] = useActionState<ActionState, FormData>(
+    reserveKit,
+    undefined,
+  );
+  const [open, setOpen] = useState(false);
+
+  if (kits.length === 0) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-6 rounded-(--radius-card) border border-line px-4 py-2.5 text-sm font-medium text-navy transition hover:border-navy"
+      >
+        Reserve a bundle
+      </button>
+    );
+  }
+
+  return (
+    <form action={action} className="mt-6 border-t border-line pt-6">
+      <input type="hidden" name="event_id" value={eventId} />
+      <p className="eyebrow mb-3">Reserve a bundle</p>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-1.5 sm:col-span-3">
+          <span className="text-xs text-muted">Bundle</span>
+          <select name="kit_id" required defaultValue="" className={FIELD}>
+            <option value="" disabled>
+              — pick a bundle —
+            </option>
+            {kits.map((kit) => (
+              <option key={kit.id} value={kit.id}>
+                {kit.name} — {kit.line_count} items
+                {kit.location_label ? ` · ${kit.location_label}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Reserved from</span>
+          <input
+            name="reserved_from"
+            type="date"
+            defaultValue={defaultFrom}
+            className={FIELD}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-muted">Reserved to</span>
+          <input
+            name="reserved_to"
+            type="date"
+            defaultValue={defaultTo}
+            className={FIELD}
+          />
+        </label>
+      </div>
+
+      {state?.error && (
+        <p role="alert" className="mt-3 text-sm text-red-700">
+          {state.error}
+        </p>
+      )}
+      {state?.warning && (
+        <p className="mt-3 rounded-(--radius-card) border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {state.warning}
+        </p>
+      )}
+      {state?.success && !state.warning && (
+        <p className="mt-3 text-sm text-green-700">
+          Bundle reserved in full.
+        </p>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-(--radius-card) bg-navy px-4 py-2.5 text-sm font-medium text-cream transition hover:opacity-90 disabled:opacity-60"
+        >
+          {pending ? "Reserving…" : "Reserve bundle"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-(--radius-card) border border-line px-4 py-2.5 text-sm text-muted transition hover:text-ink"
+        >
+          Done
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /* ── Reserve form ────────────────────────────────────────────────────── */
 
 function ReserveForm({
@@ -363,10 +481,12 @@ export function InventoryPanel({
   ev,
   availabilityByItem,
   inventory,
+  kits,
 }: {
   ev: EventDetail;
   availabilityByItem: Record<string, Availability>;
   inventory: InventoryListRow[];
+  kits: KitOption[];
 }) {
   // Window defaults for the reserve form (job window or the event day).
   const day = ev.event_date ?? (ev.start_at ? ev.start_at.slice(0, 10) : "");
@@ -442,12 +562,20 @@ export function InventoryPanel({
         </div>
       )}
 
-      <ReserveForm
-        eventId={ev.id}
-        inventory={inventory}
-        defaultFrom={defaultFrom}
-        defaultTo={defaultTo}
-      />
+      <div className="flex flex-wrap items-start gap-3">
+        <ReserveForm
+          eventId={ev.id}
+          inventory={inventory}
+          defaultFrom={defaultFrom}
+          defaultTo={defaultTo}
+        />
+        <ReserveKitForm
+          eventId={ev.id}
+          kits={kits}
+          defaultFrom={defaultFrom}
+          defaultTo={defaultTo}
+        />
+      </div>
     </section>
   );
 }
