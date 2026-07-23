@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { pacificToday } from "@/lib/time";
 import type { Database } from "@/lib/database.types";
 
 /**
@@ -65,10 +66,25 @@ export type StatusCount = {
 export type FollowUp = {
   id: string;
   subject: string;
-  type: ActivityType;
+  /** null for a deal's own follow-up date (no activity type behind it). */
+  type: ActivityType | null;
   due_at: string;
   href: string;
   label: string;
+  /** True once the due date has passed — the card renders these in red. */
+  overdue: boolean;
+};
+
+export type StaleLead = {
+  id: string;
+  title: string;
+  contact_name: string | null;
+  contact_attempts: number;
+  follow_up_date: string | null;
+  last_contacted_at: string | null;
+  /** Whole days past the follow-up date; null when no date was ever set. */
+  days_overdue: number | null;
+  href: string;
 };
 
 // --- upcomingLogistics ------------------------------------------------------
@@ -281,20 +297,44 @@ export async function jobsByStatus(): Promise<StatusCount[]> {
  * each with a derived deep-link href + label to its primary related record
  * (deal > contact > company > event, falling back to the CRM index).
  */
+/**
+ * Everything owed a nudge, from BOTH places a follow-up can live:
+ *
+ *  1. activities.due_at  — an explicit task/reminder someone logged
+ *  2. deals.follow_up_date — the date typed straight onto the deal
+ *
+ * (2) used to be invisible here, so a rep who set a follow-up date on a deal —
+ * the normal way it's done — saw nothing on the dashboard and the date quietly
+ * went by. Won/lost deals are excluded: a closed deal must not keep nagging.
+ *
+ * Both sources are merged, sorted by due date (soonest first, overdue at the
+ * top), and trimmed to `limit`.
+ */
 export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("activities")
-    .select(
-      "id, subject, type, due_at, deal_id, contact_id, company_id, event_id",
-    )
-    .not("due_at", "is", null)
-    .is("completed_at", null)
-    .order("due_at", { ascending: true })
-    .limit(limit);
+  const [activityResult, dealResult] = await Promise.all([
+    supabase
+      .from("activities")
+      .select(
+        "id, subject, type, due_at, deal_id, contact_id, company_id, event_id",
+      )
+      .not("due_at", "is", null)
+      .is("completed_at", null)
+      .order("due_at", { ascending: true })
+      .limit(limit),
+    supabase
+      .from("deals")
+      .select("id, title, follow_up_date, contacts(first_name, last_name)")
+      .not("follow_up_date", "is", null)
+      .eq("status", "open")
+      .order("follow_up_date", { ascending: true })
+      .limit(limit),
+  ]);
 
-  if (error) throw new Error(error.message);
+  const { data } = activityResult;
+  if (activityResult.error) throw new Error(activityResult.error.message);
+  if (dealResult.error) throw new Error(dealResult.error.message);
 
   type Row = {
     id: string;
@@ -307,7 +347,9 @@ export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
     event_id: string | null;
   };
 
-  return ((data ?? []) as unknown as Row[]).flatMap((row) => {
+  const now = Date.now();
+
+  const fromActivities = ((data ?? []) as unknown as Row[]).flatMap((row) => {
     if (!row.due_at) return [];
 
     let href = "/crm";
@@ -334,7 +376,110 @@ export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
         due_at: row.due_at,
         href,
         label,
+        overdue: new Date(row.due_at).getTime() < now,
       },
     ];
   });
+
+  type DealRow = {
+    id: string;
+    title: string | null;
+    follow_up_date: string | null;
+    contacts: { first_name: string | null; last_name: string | null } | null;
+  };
+
+  const fromDeals = ((dealResult.data ?? []) as unknown as DealRow[]).flatMap(
+    (row) => {
+      if (!row.follow_up_date) return [];
+      const who = [row.contacts?.first_name, row.contacts?.last_name]
+        .filter(Boolean)
+        .join(" ");
+      return [
+        {
+          id: `deal:${row.id}`,
+          subject: row.title ?? "Untitled deal",
+          type: null,
+          // A pure DATE column: pin it to end-of-day UTC so a follow-up dated
+          // today doesn't sort (or read) as already overdue this morning.
+          due_at: `${row.follow_up_date}T23:59:59Z`,
+          href: `/crm/deals/${row.id}`,
+          label: who ? `Deal · ${who}` : "Deal",
+          overdue: new Date(`${row.follow_up_date}T23:59:59Z`).getTime() < now,
+        },
+      ];
+    },
+  );
+
+  return [...fromActivities, ...fromDeals]
+    .sort((a, b) => a.due_at.localeCompare(b.due_at))
+    .slice(0, limit);
+}
+
+/**
+ * Leads that look dead: an OPEN deal that's been chased at least twice, or whose
+ * follow-up date has come and gone. These are what clog the pipeline — the
+ * dashboard surfaces them so they can be marked lost or removed rather than
+ * sitting there forever.
+ *
+ * Ordered most-chased first, then longest overdue.
+ */
+export async function staleLeads(
+  minAttempts = 2,
+  limit = 8,
+): Promise<StaleLead[]> {
+  const supabase = await createClient();
+
+  const today = pacificToday();
+
+  const { data, error } = await supabase
+    .from("deals")
+    .select(
+      "id, title, contact_attempts, follow_up_date, last_contacted_at, contacts(first_name, last_name)",
+    )
+    .eq("status", "open")
+    .or(`contact_attempts.gte.${minAttempts},follow_up_date.lt.${today}`)
+    .limit(50);
+
+  if (error) throw new Error(error.message);
+
+  type Row = {
+    id: string;
+    title: string | null;
+    contact_attempts: number | null;
+    follow_up_date: string | null;
+    last_contacted_at: string | null;
+    contacts: { first_name: string | null; last_name: string | null } | null;
+  };
+
+  const todayMs = new Date(`${today}T00:00:00Z`).getTime();
+  const DAY_MS = 86_400_000;
+
+  return ((data ?? []) as unknown as Row[])
+    .map((row) => {
+      const name = [row.contacts?.first_name, row.contacts?.last_name]
+        .filter(Boolean)
+        .join(" ");
+      const daysOverdue = row.follow_up_date
+        ? Math.floor(
+            (todayMs - new Date(`${row.follow_up_date}T00:00:00Z`).getTime()) /
+              DAY_MS,
+          )
+        : null;
+      return {
+        id: row.id,
+        title: row.title ?? "Untitled deal",
+        contact_name: name || null,
+        contact_attempts: row.contact_attempts ?? 0,
+        follow_up_date: row.follow_up_date,
+        last_contacted_at: row.last_contacted_at,
+        days_overdue: daysOverdue != null && daysOverdue > 0 ? daysOverdue : null,
+        href: `/crm/deals/${row.id}`,
+      };
+    })
+    .sort(
+      (a, b) =>
+        b.contact_attempts - a.contact_attempts ||
+        (b.days_overdue ?? 0) - (a.days_overdue ?? 0),
+    )
+    .slice(0, limit);
 }

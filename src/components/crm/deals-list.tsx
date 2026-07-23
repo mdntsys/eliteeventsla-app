@@ -88,6 +88,9 @@ export function DealsList({ deals }: { deals: DealRow[] }) {
                     Follow-up due
                   </th>
                   <th className="px-4 py-3 text-right font-medium text-muted">
+                    Touches
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium text-muted">
                     Value
                   </th>
                   <th className="px-4 py-3 text-right font-medium text-muted">
@@ -125,6 +128,13 @@ export function DealsList({ deals }: { deals: DealRow[] }) {
                       </td>
                       <td className="px-4 py-3 text-muted">
                         {formatDate(d.follow_up_date)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted">
+                        {d.contact_attempts > 0 ? (
+                          d.contact_attempts
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-ink">
                         {formatMoney(d.estimated_value)}

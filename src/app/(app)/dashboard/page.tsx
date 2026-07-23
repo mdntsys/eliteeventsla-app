@@ -11,6 +11,7 @@ import {
   EmptyState,
   ListRow,
 } from "@/components/dashboard/dashboard-card";
+import { StaleLeadActions } from "@/components/dashboard/stale-lead-actions";
 import {
   upcomingLogistics,
   pendingReturns,
@@ -18,6 +19,7 @@ import {
   openHotTickets,
   jobsByStatus,
   upcomingFollowUps,
+  staleLeads,
 } from "@/lib/dashboard/queries";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -75,7 +77,7 @@ export default async function DashboardPage() {
       ? ROLE_LABELS[profile.role]
       : "Pending access";
 
-  const [logistics, returns, vendors, tickets, jobs, followUps] =
+  const [logistics, returns, vendors, tickets, jobs, followUps, stale] =
     await Promise.all([
       upcomingLogistics(7),
       pendingReturns(),
@@ -83,6 +85,7 @@ export default async function DashboardPage() {
       openHotTickets(),
       jobsByStatus(),
       upcomingFollowUps(8),
+      staleLeads(),
     ]);
 
   // Quick links: the same per-area gating the sidebar uses (excluding the
@@ -331,7 +334,11 @@ export default async function DashboardPage() {
                       {item.label}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs text-muted tabular-nums">
+                  <span
+                    className={`shrink-0 text-xs tabular-nums ${
+                      item.overdue ? "font-medium text-red-700" : "text-muted"
+                    }`}
+                  >
                     {formatShortDate(item.due_at)}
                   </span>
                 </ListRow>
@@ -339,6 +346,52 @@ export default async function DashboardPage() {
             </div>
           )}
         </DashboardCard>
+
+        {/* Stale leads — chased repeatedly or past their follow-up date */}
+        {canCrm && (
+          <DashboardCard
+            title="Stale leads"
+            href="/crm/deals"
+            count={stale.length}
+          >
+            {stale.length === 0 ? (
+              <EmptyState>Pipeline is clean — nothing gone cold.</EmptyState>
+            ) : (
+              <div>
+                {stale.map((lead) => (
+                  <ListRow key={lead.id}>
+                    <div className="min-w-0">
+                      <Link
+                        href={lead.href}
+                        className="block truncate font-medium text-navy underline-offset-2 hover:underline"
+                      >
+                        {lead.title}
+                      </Link>
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {[
+                          lead.contact_name,
+                          lead.contact_attempts > 0
+                            ? `${lead.contact_attempts} ${
+                                lead.contact_attempts === 1
+                                  ? "attempt"
+                                  : "attempts"
+                              }`
+                            : "never contacted",
+                          lead.days_overdue
+                            ? `overdue ${lead.days_overdue}d`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    <StaleLeadActions dealId={lead.id} dealTitle={lead.title} />
+                  </ListRow>
+                ))}
+              </div>
+            )}
+          </DashboardCard>
+        )}
       </div>
     </>
   );

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireView } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import {
   getDeal,
   listContactOptions,
@@ -15,6 +16,8 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/inventory/status-badge";
 import { DealForm } from "@/components/crm/deal-form";
 import { DealStageControl } from "@/components/crm/deal-stage-control";
+import { LogTouchButton } from "@/components/crm/log-touch-button";
+import { DeleteDealButton } from "@/components/crm/delete-deal-button";
 import { ActivityLog } from "@/components/crm/activity-log";
 
 export const metadata: Metadata = { title: "Deal" };
@@ -69,7 +72,7 @@ export default async function DealDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireView("crm");
+  const profile = await requireView("crm");
   const { id } = await params;
 
   const [deal, contacts, companies, stages, staff, admins, affiliates] =
@@ -162,9 +165,24 @@ export default async function DealDetailPage({
             <SummaryField label="Follow-up due">
               {formatDate(deal.follow_up_date)}
             </SummaryField>
+            <SummaryField label="Times contacted">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="tabular-nums">
+                  {deal.contact_attempts ?? 0}
+                </span>
+                {deal.last_contacted_at && (
+                  <span className="text-xs text-muted">
+                    last {formatDate(deal.last_contacted_at)}
+                  </span>
+                )}
+              </span>
+            </SummaryField>
             {deal.source && (
               <SummaryField label="Source">{deal.source}</SummaryField>
             )}
+            <div className="flex items-end">
+              <LogTouchButton dealId={deal.id} />
+            </div>
           </div>
 
           <DealForm
@@ -191,6 +209,17 @@ export default async function DealDetailPage({
           activities={deal.activities}
           staff={staff}
         />
+
+        {canEdit(profile, "crm") && (
+          <section className="rounded-(--radius-card) border border-line bg-card p-6">
+            <p className="eyebrow mb-1">Danger zone</p>
+            <p className="mb-4 text-sm text-muted">
+              Marking a dead lead <strong>lost</strong> from the stage control
+              above keeps its history. Delete only a junk entry.
+            </p>
+            <DeleteDealButton dealId={deal.id} dealTitle={deal.title} />
+          </section>
+        )}
       </div>
     </>
   );

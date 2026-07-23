@@ -166,6 +166,35 @@ export function DealForm({
           />
         </label>
 
+        {/* Both normally move via "Log a touch" on the deal; editable here so a
+            lead chased before that existed can be corrected. Only rendered when
+            editing — a brand-new deal starts at zero. */}
+        {deal && (
+          <>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted">Times contacted</span>
+              <input
+                name="contact_attempts"
+                type="number"
+                min={0}
+                step={1}
+                defaultValue={deal.contact_attempts ?? 0}
+                className={FIELD}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted">Last contacted</span>
+              <input
+                name="last_contacted_at"
+                type="date"
+                defaultValue={deal.last_contacted_at ?? ""}
+                className={FIELD}
+              />
+            </label>
+          </>
+        )}
+
         <label className="flex flex-col gap-1.5">
           <span className="text-xs text-muted">Referred by (affiliate)</span>
           <select

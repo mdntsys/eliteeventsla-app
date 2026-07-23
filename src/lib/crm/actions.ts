@@ -9,12 +9,14 @@ import { getUser, getProfile, requireEdit } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
 import {
   optionalDate,
+  optionalInt,
   optionalPacificDateTime,
   optionalEmail,
   optionalMoney,
   optionalText,
   optionalUuid,
 } from "@/lib/forms/coercions";
+import { pacificToday } from "@/lib/time";
 import type { ActionState, Option } from "@/lib/crm/types";
 
 /**
@@ -97,7 +99,13 @@ const CreateDealSchema = z.object(dealFields);
 const UpdateDealSchema = z.object({
   id: z.uuid("A deal is required."),
   ...dealFields,
+  // Editable so an existing lead already chased a few times can be backfilled;
+  // "Log a touch" is the normal way these move.
+  contact_attempts: optionalInt,
+  last_contacted_at: optionalDate,
 });
+
+const DealIdSchema = z.object({ deal_id: z.uuid("A deal is required.") });
 
 const SetDealStageSchema = z.object({
   deal_id: z.uuid("A deal is required."),
@@ -506,6 +514,8 @@ export async function updateDeal(
     owner_id: formData.get("owner_id"),
     affiliate_id: formData.get("affiliate_id"),
     notes: formData.get("notes"),
+    contact_attempts: formData.get("contact_attempts"),
+    last_contacted_at: formData.get("last_contacted_at"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
 
@@ -527,6 +537,16 @@ export async function updateDeal(
     notes: data.notes,
     updated_at: new Date().toISOString(),
   };
+
+  // Only apply the contact-log fields when the submitting form actually carries
+  // them, so a form that doesn't render them can never silently reset the
+  // attempt count to zero.
+  if (formData.has("contact_attempts")) {
+    update.contact_attempts = data.contact_attempts ?? 0;
+  }
+  if (formData.has("last_contacted_at")) {
+    update.last_contacted_at = data.last_contacted_at;
+  }
 
   // Only reconcile status from the stage when the stage actually moved. A plain
   // edit (e.g. changing the follow-up date) must not clobber a 'won' status set
@@ -585,6 +605,158 @@ export async function setDealStage(
   revalidatePath(`/crm/deals/${deal_id}`);
   revalidatePath("/crm/deals");
   revalidatePath("/crm");
+  return { success: true };
+}
+
+/**
+ * Record one outreach attempt against a deal: bump the counter, stamp today
+ * (Pacific) as the last-contacted date, and drop a line in the deal's activity
+ * log so the timeline shows WHEN each chase happened, not just how many.
+ *
+ * This is the counterpart to the dashboard's stale-lead list — a lead that has
+ * been chased several times with nothing back is the one to kill.
+ */
+export async function logDealTouch(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("crm");
+
+  const parsed = DealIdSchema.safeParse({ deal_id: formData.get("deal_id") });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { deal_id } = parsed.data;
+  const user = await getUser();
+  const supabase = await createClient();
+
+  const { data: deal, error: readError } = await supabase
+    .from("deals")
+    .select("id, contact_attempts, contact_id, company_id")
+    .eq("id", deal_id)
+    .maybeSingle();
+  if (readError) return { error: readError.message };
+  if (!deal) return { error: "That deal no longer exists." };
+
+  const attempts = (deal.contact_attempts ?? 0) + 1;
+
+  const { error } = await supabase
+    .from("deals")
+    .update({
+      contact_attempts: attempts,
+      last_contacted_at: pacificToday(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", deal_id);
+  if (error) return { error: error.message };
+
+  // Best-effort timeline entry — a failed log line must not lose the count.
+  await supabase.from("activities").insert({
+    type: "call",
+    subject: `Contact attempt #${attempts}`,
+    deal_id,
+    contact_id: deal.contact_id,
+    company_id: deal.company_id,
+    completed_at: new Date().toISOString(),
+    created_by: user?.id ?? null,
+  });
+
+  revalidatePath(`/crm/deals/${deal_id}`);
+  revalidatePath("/crm/deals");
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+/**
+ * Drop a dead lead out of the pipeline without destroying it: status -> 'lost'
+ * and, when the pipeline has a "Lost" stage, move it there so the board agrees
+ * with the status. The contact, notes, and activity history all survive.
+ */
+export async function markDealLost(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("crm");
+
+  const parsed = DealIdSchema.safeParse({ deal_id: formData.get("deal_id") });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { deal_id } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: lostStage } = await supabase
+    .from("pipeline_stages")
+    .select("id")
+    .eq("name", "Lost")
+    .maybeSingle();
+
+  const update: TablesUpdate<"deals"> = {
+    status: "lost",
+    updated_at: new Date().toISOString(),
+  };
+  if (lostStage?.id) update.stage_id = lostStage.id;
+
+  const { error } = await supabase
+    .from("deals")
+    .update(update)
+    .eq("id", deal_id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/crm/deals/${deal_id}`);
+  revalidatePath("/crm/deals");
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+  return { success: true };
+}
+
+/**
+ * Permanently delete a dead lead.
+ *
+ * Guarded: a deal that was already converted into an event is REFUSED, because
+ * events.deal_id is ON DELETE SET NULL — deleting would silently sever the
+ * booking from the lead it came from rather than failing loudly. Those get
+ * marked lost instead. Activities cascade with the deal (they're its own log);
+ * quotes keep their history and just lose the link.
+ */
+export async function deleteDeal(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("crm");
+
+  const parsed = DealIdSchema.safeParse({ deal_id: formData.get("deal_id") });
+  if (!parsed.success) return { error: firstError(parsed.error) };
+
+  const { deal_id } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: linkedEvent } = await supabase
+    .from("events")
+    .select("id, title")
+    .eq("deal_id", deal_id)
+    .limit(1)
+    .maybeSingle();
+
+  if (linkedEvent) {
+    return {
+      error: `This deal was already booked as "${linkedEvent.title ?? "an event"}". Mark it lost instead, or delete the event first.`,
+    };
+  }
+
+  const { error } = await supabase.from("deals").delete().eq("id", deal_id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/crm/deals");
+  revalidatePath("/crm");
+  revalidatePath("/dashboard");
+
+  // Deleting from the deal's own page has to navigate away (that route is now
+  // gone); deleting from the dashboard passes nothing and stays put so several
+  // can be cleared in a row. Pattern-checked so the field can't become an
+  // open redirect. redirect() throws — keep it out of any try/catch.
+  const to = String(formData.get("redirect_to") ?? "");
+  if (to && /^\/[A-Za-z0-9/_-]*$/.test(to)) redirect(to);
+
   return { success: true };
 }
 

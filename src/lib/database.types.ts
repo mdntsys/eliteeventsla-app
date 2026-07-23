@@ -531,6 +531,7 @@ export type Database = {
         Row: {
           affiliate_id: string | null
           company_id: string | null
+          contact_attempts: number
           contact_id: string | null
           created_at: string
           created_by: string | null
@@ -539,6 +540,7 @@ export type Database = {
           expected_event_date: string | null
           follow_up_date: string | null
           id: string
+          last_contacted_at: string | null
           notes: string | null
           owner_id: string | null
           source: string | null
@@ -550,6 +552,7 @@ export type Database = {
         Insert: {
           affiliate_id?: string | null
           company_id?: string | null
+          contact_attempts?: number
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -558,6 +561,7 @@ export type Database = {
           expected_event_date?: string | null
           follow_up_date?: string | null
           id?: string
+          last_contacted_at?: string | null
           notes?: string | null
           owner_id?: string | null
           source?: string | null
@@ -569,6 +573,7 @@ export type Database = {
         Update: {
           affiliate_id?: string | null
           company_id?: string | null
+          contact_attempts?: number
           contact_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -577,6 +582,7 @@ export type Database = {
           expected_event_date?: string | null
           follow_up_date?: string | null
           id?: string
+          last_contacted_at?: string | null
           notes?: string | null
           owner_id?: string | null
           source?: string | null

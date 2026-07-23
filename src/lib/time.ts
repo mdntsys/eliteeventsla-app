@@ -89,6 +89,22 @@ export function utcToPacificInputValue(iso: string | null): string {
 }
 
 /**
+ * Today's business date as "YYYY-MM-DD" in Pacific, for writing pure DATE
+ * columns. `new Date().toISOString().slice(0, 10)` is the bug this replaces: on
+ * the production server (UTC) anything logged after 5pm Pacific would be stamped
+ * with tomorrow's date.
+ */
+export function pacificToday(): string {
+  // en-CA formats as YYYY-MM-DD, which is exactly the DATE wire format.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: APP_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
  * Format a stored UTC timestamp in Pacific. Pass the same options you'd give
  * `toLocaleString`; `timeZone` is forced to Pacific. Returns `fallback` for
  * empty/invalid input.
