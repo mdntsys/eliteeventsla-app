@@ -35,9 +35,6 @@ export function KitsManager({
     undefined,
   );
 
-  // Close on success in the render body — never in an effect (see PATTERNS).
-  if (state?.success && open) setOpen(false);
-
   return (
     <div className="flex flex-col gap-6">
       {canEdit && (
@@ -123,7 +120,7 @@ export function KitsManager({
                   </p>
                   {!kit.is_active && (
                     <span className="shrink-0 rounded-full border border-line bg-cream px-2.5 py-0.5 text-xs text-muted">
-                      Retired
+                      Inactive
                     </span>
                   )}
                 </div>

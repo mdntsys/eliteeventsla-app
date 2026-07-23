@@ -117,37 +117,49 @@ export async function POST(
 
     const db = createServiceClient();
 
-    // Re-point the invoice's existing in-flight attempt at the new session
-    // instead of stacking another row. A payer who opens checkout, backs out,
-    // and tries again used to leave a permanent "Pending" row behind for every
-    // attempt, so a fully-paid invoice could still read as money owed. Only a
-    // row that never reached a charge (no intent) is reusable — one that has an
-    // intent is a real payment in progress and must be left alone.
-    const { data: reusable } = await db
+    // Retire the invoice's earlier hosted-checkout attempts, then record THIS
+    // session as its own row.
+    //
+    // One row per session is load-bearing. The webhook matches
+    // checkout.session.completed by stripe_checkout_session_id, so a row
+    // re-pointed at a newer session leaves an older session unmatchable — if
+    // the payer completes that one (two tabs, back button, or the still-visible
+    // Pay button before the webhook lands) the charge would never reach the
+    // invoice. Marking superseded rows 'cancelled' keeps them matchable —
+    // markPayments has no status guard, so a late completion flips one back to
+    // succeeded — while keeping them out of the pending column.
+    //
+    // Scoped to rows carrying a session id. A Stripe PAYMENT LINK row is also
+    // stripe + pending with no intent, but links never expire and stay payable:
+    // cancelling one would make ensurePaymentLink mint a duplicate and leave a
+    // live link behind when the invoice is voided.
+    const { error: supersedeError } = await db
       .from("payments")
-      .select("id")
+      .update({ status: "cancelled" })
       .eq("invoice_id", invoice.id)
       .eq("method", "stripe")
       .eq("status", "pending")
       .is("stripe_payment_intent_id", null)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .not("stripe_checkout_session_id", "is", null);
+    if (supersedeError) {
+      console.error("Invoice checkout supersede error:", supersedeError);
+    }
 
-    const attempt = {
+    const { error: insertError } = await db.from("payments").insert({
+      invoice_id: invoice.id,
       event_id: invoice.event_id,
       amount: invoice.balance,
       currency: "usd",
-      method: "stripe" as const,
-      status: "pending" as const,
+      method: "stripe",
+      status: "pending",
       stripe_checkout_session_id: session.id,
       notes: "Stripe checkout (invoice page)",
-    };
-
-    if (reusable) {
-      await db.from("payments").update(attempt).eq("id", reusable.id);
-    } else {
-      await db.from("payments").insert({ invoice_id: invoice.id, ...attempt });
+    });
+    // Never send a payer into a checkout no row can match: the webhook would
+    // have nothing to reconcile and the payment would land invisibly.
+    if (insertError) {
+      console.error("Invoice checkout insert error:", insertError);
+      return NextResponse.redirect(`${back}?error=checkout`, 303);
     }
 
     if (!session.url) return NextResponse.redirect(`${back}?error=checkout`, 303);

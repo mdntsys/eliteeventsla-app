@@ -277,6 +277,7 @@ function ReserveKitForm({
           <input
             name="reserved_from"
             type="date"
+            required
             defaultValue={defaultFrom}
             className={FIELD}
           />
@@ -286,6 +287,7 @@ function ReserveKitForm({
           <input
             name="reserved_to"
             type="date"
+            required
             defaultValue={defaultTo}
             className={FIELD}
           />
@@ -321,7 +323,7 @@ function ReserveKitForm({
           onClick={() => setOpen(false)}
           className="rounded-(--radius-card) border border-line px-4 py-2.5 text-sm text-muted transition hover:text-ink"
         >
-          Done
+          Cancel
         </button>
       </div>
     </form>

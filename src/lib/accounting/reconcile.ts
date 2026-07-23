@@ -86,12 +86,21 @@ export async function reconcileInvoiceAndActivateEvent(
     .update({ amount_paid: paid, status })
     .eq("id", invoiceId);
 
-  // Once the invoice is settled, any hosted-checkout attempt still sitting at
+  // Once the invoice is settled, a hosted-checkout attempt still sitting at
   // 'pending' is an abandoned tab — Stripe never sends a completion event for
   // one, so it would otherwise read as outstanding money forever beside the
-  // payment that actually landed. Only rows that never reached a charge (no
-  // intent) are retired; a pending row WITH an intent is a real charge still
-  // settling. Cosmetic by construction: amount_paid counts 'succeeded' only.
+  // payment that actually landed.
+  //
+  // Narrow on purpose. Only rows carrying a CHECKOUT SESSION id are touched:
+  // a Stripe payment-link row is also stripe + pending with no intent, but a
+  // link never expires and stays payable, so retiring one would make
+  // ensurePaymentLink mint a duplicate and would leave a live link active when
+  // the invoice is voided. The no-intent filter additionally skips anything
+  // that already reached a charge.
+  //
+  // Safe either way: amount_paid counts 'succeeded' only, and markPayments has
+  // no status guard, so a session that completes late still flips its row back
+  // to succeeded and reconciles normally.
   if (status === "paid" || status === "void") {
     await supabase
       .from("payments")
@@ -99,7 +108,8 @@ export async function reconcileInvoiceAndActivateEvent(
       .eq("invoice_id", invoiceId)
       .eq("method", "stripe")
       .eq("status", "pending")
-      .is("stripe_payment_intent_id", null);
+      .is("stripe_payment_intent_id", null)
+      .not("stripe_checkout_session_id", "is", null);
   }
 
   // Activate the linked event on first money in: a deposit (or full payment)

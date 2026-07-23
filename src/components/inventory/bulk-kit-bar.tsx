@@ -37,9 +37,14 @@ export function BulkKitBar({
       if (result?.error) {
         setError(result.error);
         setNotice(null);
+      } else if (result?.warning) {
+        // Keep the selection so this actually renders — clearing it unmounts
+        // the bar and the message would never be seen.
+        setError(null);
+        setNotice(result.warning);
       } else {
         setError(null);
-        setNotice(result?.warning ?? null);
+        setNotice(null);
         setKitId("");
         onAssigned();
       }

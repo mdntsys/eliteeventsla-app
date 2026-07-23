@@ -32,13 +32,8 @@ type KitRowJoins = InventoryKit & {
 
 function toListRow(kit: KitRowJoins): KitListRow {
   const lines = kit.inventory_kit_items ?? [];
-  const {
-    locations,
-    warehouse_rows,
-    inventory_kit_items: _lines,
-    ...rest
-  } = kit;
-  void _lines;
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */
+  const { locations, warehouse_rows, inventory_kit_items, ...rest } = kit;
   return {
     ...rest,
     location_name: locations?.name ?? null,
@@ -66,7 +61,19 @@ export async function listKits(): Promise<KitListRow[]> {
 
 /** Active bundles only — what the event hub offers for reservation. */
 export async function listActiveKits(): Promise<KitListRow[]> {
-  return (await listKits()).filter((k) => k.is_active);
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("inventory_kits")
+    .select(
+      "*, locations(name), warehouse_rows(label), inventory_kit_items(id, quantity)",
+    )
+    .eq("is_active", true)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as KitRowJoins[]).map(toListRow);
 }
 
 /** One bundle with its contents, or null if it doesn't exist / isn't visible. */
@@ -93,6 +100,27 @@ export async function getKit(id: string): Promise<KitDetail | null> {
 
   if (lineError) throw new Error(lineError.message);
 
+  // Serialized stock has no meaningful `inventory_items.quantity` (it stays 0);
+  // its on-hand figure is the number of units that exist. Without this every
+  // serialized line reads "0 on hand" and gets flagged as over-committed.
+  const serializedIds = ((lineData ?? []) as unknown as { item_id: string;
+    inventory_items: { kind: string } | null }[])
+    .filter((l) => l.inventory_items?.kind === "serialized")
+    .map((l) => l.item_id);
+
+  const unitCounts = new Map<string, number>();
+  if (serializedIds.length > 0) {
+    const { data: unitRows, error: unitError } = await supabase
+      .from("inventory_units")
+      .select("item_id")
+      .in("item_id", Array.from(new Set(serializedIds)))
+      .neq("status", "retired");
+    if (unitError) throw new Error(unitError.message);
+    for (const u of (unitRows ?? []) as { item_id: string }[]) {
+      unitCounts.set(u.item_id, (unitCounts.get(u.item_id) ?? 0) + 1);
+    }
+  }
+
   type LineJoins = {
     id: string;
     item_id: string;
@@ -118,7 +146,10 @@ export async function getKit(id: string): Promise<KitDetail | null> {
       item_name: l.inventory_items?.name ?? "Unknown item",
       item_sku: l.inventory_items?.sku ?? null,
       item_kind: l.inventory_items?.kind ?? "bulk",
-      item_on_hand: l.inventory_items?.quantity ?? 0,
+      item_on_hand:
+        l.inventory_items?.kind === "serialized"
+          ? (unitCounts.get(l.item_id) ?? 0)
+          : (l.inventory_items?.quantity ?? 0),
       unit_asset_tag: l.inventory_units?.asset_tag ?? null,
     }))
     .sort((a, b) => a.item_name.localeCompare(b.item_name));

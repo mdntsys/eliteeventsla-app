@@ -71,6 +71,12 @@ export type FollowUp = {
   due_at: string;
   href: string;
   label: string;
+  /**
+   * True when this came from a deal's `follow_up_date`, a pure DATE column.
+   * The card must render it as a day with no clock time — inventing one would
+   * both look wrong and drift with DST.
+   */
+  date_only: boolean;
   /** True once the due date has passed — the card renders these in red. */
   overdue: boolean;
 };
@@ -293,11 +299,6 @@ export async function jobsByStatus(): Promise<StatusCount[]> {
 // --- upcomingFollowUps ------------------------------------------------------
 
 /**
- * Open (not-yet-completed) activities that have a due date, soonest-due first,
- * each with a derived deep-link href + label to its primary related record
- * (deal > contact > company > event, falling back to the CRM index).
- */
-/**
  * Everything owed a nudge, from BOTH places a follow-up can live:
  *
  *  1. activities.due_at  — an explicit task/reminder someone logged
@@ -348,6 +349,7 @@ export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
   };
 
   const now = Date.now();
+  const today = pacificToday();
 
   const fromActivities = ((data ?? []) as unknown as Row[]).flatMap((row) => {
     if (!row.due_at) return [];
@@ -376,6 +378,7 @@ export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
         due_at: row.due_at,
         href,
         label,
+        date_only: false,
         overdue: new Date(row.due_at).getTime() < now,
       },
     ];
@@ -399,19 +402,28 @@ export async function upcomingFollowUps(limit = 8): Promise<FollowUp[]> {
           id: `deal:${row.id}`,
           subject: row.title ?? "Untitled deal",
           type: null,
-          // A pure DATE column: pin it to end-of-day UTC so a follow-up dated
-          // today doesn't sort (or read) as already overdue this morning.
-          due_at: `${row.follow_up_date}T23:59:59Z`,
+          // Kept as the raw DATE. Formatting is the card's job (UTC, day only)
+          // and overdue is a whole-day comparison against the Pacific business
+          // date — a follow-up due today stays black until tomorrow, matching
+          // the stale-leads card instead of turning red at 5pm.
+          due_at: row.follow_up_date,
           href: `/crm/deals/${row.id}`,
           label: who ? `Deal · ${who}` : "Deal",
-          overdue: new Date(`${row.follow_up_date}T23:59:59Z`).getTime() < now,
+          date_only: true,
+          overdue: row.follow_up_date < today,
         },
       ];
     },
   );
 
+  // Sort on the instant each entry actually falls on. A date-only entry is
+  // ordered at the END of its day so it doesn't jump ahead of timed activities
+  // scheduled earlier the same day.
+  const sortKey = (f: { due_at: string; date_only: boolean }) =>
+    f.date_only ? `${f.due_at}T23:59:59.999Z` : f.due_at;
+
   return [...fromActivities, ...fromDeals]
-    .sort((a, b) => a.due_at.localeCompare(b.due_at))
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
     .slice(0, limit);
 }
 
@@ -438,6 +450,11 @@ export async function staleLeads(
     )
     .eq("status", "open")
     .or(`contact_attempts.gte.${minAttempts},follow_up_date.lt.${today}`)
+    // Order in SQL, not just in JS afterwards: the row cap below is applied by
+    // Postgres, so without this an arbitrary 50 rows come back and the
+    // "most-chased" list stops being the most-chased one.
+    .order("contact_attempts", { ascending: false })
+    .order("follow_up_date", { ascending: true, nullsFirst: false })
     .limit(50);
 
   if (error) throw new Error(error.message);

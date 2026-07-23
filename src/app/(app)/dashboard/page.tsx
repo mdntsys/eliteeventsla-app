@@ -54,6 +54,21 @@ function formatDateTime(value: string | null): string {
   });
 }
 
+/**
+ * A pure DATE ("YYYY-MM-DD") — a deal's follow-up date. Formatted in UTC with
+ * no clock time: these columns are timezone-less, so rendering them in Pacific
+ * shifts the day, and attaching a time would be inventing one.
+ */
+function formatDueDate(value: string): string {
+  const d = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 function formatShortDate(value: string | null): string {
   if (!value) return "—";
   const d = new Date(value);
@@ -339,7 +354,9 @@ export default async function DashboardPage() {
                       item.overdue ? "font-medium text-red-700" : "text-muted"
                     }`}
                   >
-                    {formatShortDate(item.due_at)}
+                    {item.date_only
+                      ? formatDueDate(item.due_at)
+                      : formatShortDate(item.due_at)}
                   </span>
                 </ListRow>
               ))}

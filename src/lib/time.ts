@@ -105,6 +105,33 @@ export function pacificToday(): string {
 }
 
 /**
+ * Expand a date-only "YYYY-MM-DD" to the UTC instant of that Pacific day's
+ * START (00:00) or END (23:59:59). Anything already carrying a time is treated
+ * as a Pacific wall-clock value and converted as-is.
+ *
+ * This exists for reservation windows, which are picked with `<input
+ * type="date">`. Feeding "2026-08-15" to `new Date()` yields UTC midnight —
+ * 5pm Pacific on Aug 14 — so a one-day job both booked the wrong day AND
+ * produced `reserved_from === reserved_to`. A zero-length window is an EMPTY
+ * range in Postgres, and an empty range overlaps nothing: it silently disabled
+ * the `event_items` double-booking EXCLUDE constraint and every JS overlap
+ * test built on it. Bounding the day makes both work.
+ */
+export function pacificDayBoundUtcISO(
+  value: string,
+  bound: "start" | "end",
+): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    return pacificWallClockToUtcISO(
+      `${v}T${bound === "start" ? "00:00:00" : "23:59:59"}`,
+    );
+  }
+  return pacificWallClockToUtcISO(v);
+}
+
+/**
  * Format a stored UTC timestamp in Pacific. Pass the same options you'd give
  * `toLocaleString`; `timeZone` is forced to Pacific. Returns `fallback` for
  * empty/invalid input.

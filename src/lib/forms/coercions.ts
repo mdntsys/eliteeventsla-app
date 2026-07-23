@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pacificWallClockToUtcISO } from "@/lib/time";
+import { pacificWallClockToUtcISO, pacificDayBoundUtcISO } from "@/lib/time";
 
 /**
  * Shared, null-safe form-field coercions for server actions.
@@ -183,6 +183,40 @@ export const optionalPacificDateTime = z.preprocess(
       message: "Enter a valid date and time.",
     })
     .transform((v) => (v === "" ? null : pacificWallClockToUtcISO(v))),
+);
+
+/**
+ * Empty/absent → null; otherwise a reservation-window bound stored as UTC.
+ *
+ * These take an `<input type="date">` value and bound the PACIFIC day: the
+ * "from" end becomes 00:00 Pacific, the "to" end 23:59:59 Pacific. Do not use
+ * plain {@link optionalTimestamp} for a reservation window — `new Date("2026-08-15")`
+ * is UTC midnight, i.e. 5pm Pacific the day BEFORE, and a single-day job then
+ * gets `reserved_from === reserved_to`. That zero-length window is an EMPTY
+ * range to Postgres, and an empty range overlaps nothing, so it silently
+ * defeated the `event_items` double-booking EXCLUDE constraint.
+ */
+export const optionalReserveFrom = z.preprocess(
+  toStr,
+  z
+    .string()
+    .transform((v) => v.trim())
+    .refine((v) => v === "" || pacificDayBoundUtcISO(v, "start") !== null, {
+      message: "Enter a valid start date.",
+    })
+    .transform((v) => (v === "" ? null : pacificDayBoundUtcISO(v, "start"))),
+);
+
+/** The closing bound of a reservation window. See {@link optionalReserveFrom}. */
+export const optionalReserveTo = z.preprocess(
+  toStr,
+  z
+    .string()
+    .transform((v) => v.trim())
+    .refine((v) => v === "" || pacificDayBoundUtcISO(v, "end") !== null, {
+      message: "Enter a valid end date.",
+    })
+    .transform((v) => (v === "" ? null : pacificDayBoundUtcISO(v, "end"))),
 );
 
 /** HTML checkbox → boolean ("on"/"true" → true). Already null-safe. */

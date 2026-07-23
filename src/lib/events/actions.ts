@@ -17,7 +17,8 @@ import {
   optionalInt,
   optionalMoney,
   optionalPacificDateTime,
-  optionalTimestamp,
+  optionalReserveFrom,
+  optionalReserveTo,
   optionalText,
   optionalUuid,
 } from "@/lib/forms/coercions";
@@ -85,8 +86,9 @@ const ReserveItemSchema = z
     unit_id: optionalUuid,
     quantity: z.coerce.number().int().min(1, "Quantity must be at least 1."),
     rate: optionalMoney,
-    reserved_from: optionalTimestamp,
-    reserved_to: optionalTimestamp,
+    // Pacific day bounds, not raw timestamps — see optionalReserveFrom.
+    reserved_from: optionalReserveFrom,
+    reserved_to: optionalReserveTo,
   })
   .refine(
     (d) =>
@@ -360,8 +362,15 @@ const ReserveKitSchema = z
   .object({
     event_id: z.uuid("An event is required."),
     kit_id: z.uuid("Pick a bundle."),
-    reserved_from: optionalTimestamp,
-    reserved_to: optionalTimestamp,
+    reserved_from: optionalReserveFrom,
+    reserved_to: optionalReserveTo,
+  })
+  // Both bounds are REQUIRED here. The event_items EXCLUDE constraint that stops
+  // a serialized unit being double-booked only applies `where reserved_from is
+  // not null and reserved_to is not null` (migration 0010), so an open-ended
+  // bundle reservation would slip past the one referee this action relies on.
+  .refine((d) => d.reserved_from && d.reserved_to, {
+    message: "Pick both a start and an end date for the reservation.",
   })
   .refine(
     (d) =>
@@ -440,7 +449,9 @@ export async function reserveKit(
   const itemIds = Array.from(new Set(lines.map((l) => l.item_id)));
   const { data: existingData, error: existingError } = await supabase
     .from("event_items")
-    .select("inventory_item_id, unit_id, quantity, reserved_from, reserved_to")
+    .select(
+      "inventory_item_id, unit_id, quantity, reserved_from, reserved_to, checked_out_at",
+    )
     .in("inventory_item_id", itemIds)
     .is("returned_at", null);
   if (existingError) return { error: existingError.message };
@@ -454,6 +465,7 @@ export async function reserveKit(
     quantity: number | null;
     reserved_from: string | null;
     reserved_to: string | null;
+    checked_out_at: string | null;
   };
 
   const committed = new Map<string, number>();
@@ -462,7 +474,14 @@ export async function reserveKit(
       ? new Date(row.reserved_from).getTime()
       : -Infinity;
     const to = row.reserved_to ? new Date(row.reserved_to).getTime() : Infinity;
-    if (from < wantTo && wantFrom < to) {
+    // Stock is unavailable if it's spoken for over an overlapping window OR
+    // it's physically out of the warehouse right now (checked out, not yet
+    // returned) — gear on a truck can't be loaded onto another one, whatever
+    // its paperwork window says. This matches how the inventory list computes
+    // "reserved / available"; without the checked-out arm the two screens give
+    // opposite answers about the same gear.
+    const overlapping = from < wantTo && wantFrom < to;
+    if (overlapping || row.checked_out_at != null) {
       committed.set(
         row.inventory_item_id,
         (committed.get(row.inventory_item_id) ?? 0) + (row.quantity ?? 1),
@@ -493,9 +512,27 @@ export async function reserveKit(
           gaps.push(`${name} — already booked for an overlapping window`);
           continue;
         }
-        return { error: error.message };
+        revalidatePath(`/events/${event_id}`);
+        return {
+          error:
+            reservedLines > 0
+              ? `Stopped part-way through "${kit.name}": ${reservedLines} line${reservedLines === 1 ? "" : "s"} were already reserved before this failed — review the job's inventory before retrying. (${error.message})`
+              : error.message,
+        };
       }
       reservedLines += 1;
+      // Count the pinned unit against this item too, so a bulk line for the
+      // same item in the same bundle can't re-issue stock it already took.
+      committed.set(line.item_id, (committed.get(line.item_id) ?? 0) + 1);
+      continue;
+    }
+
+    // A serialized item with no pinned unit has no meaningful bulk quantity
+    // (inventory_items.quantity stays 0 for serialized stock), so it could
+    // never be reserved and would silently drop off the pallet. Surface it as
+    // a bundle configuration problem instead.
+    if (line.inventory_items?.kind === "serialized") {
+      gaps.push(`${name} — no specific unit pinned in the bundle`);
       continue;
     }
 
@@ -516,7 +553,19 @@ export async function reserveKit(
       reserved_from,
       reserved_to,
     });
-    if (error) return { error: error.message };
+    // No transaction spans these inserts, so a hard failure part-way leaves the
+    // earlier lines reserved. Say so plainly and revalidate, rather than
+    // returning a bare Postgres message against a page that still shows the
+    // old list — otherwise a retry silently double-books what already landed.
+    if (error) {
+      revalidatePath(`/events/${event_id}`);
+      return {
+        error:
+          reservedLines > 0
+            ? `Stopped part-way through "${kit.name}": ${reservedLines} line${reservedLines === 1 ? "" : "s"} were already reserved before this failed — review the job's inventory before retrying. (${error.message})`
+            : error.message,
+      };
+    }
 
     // Count what this reservation just consumed, so two lines pointing at the
     // same item inside one bundle can't both claim the same stock.

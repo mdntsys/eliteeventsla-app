@@ -538,11 +538,11 @@ export async function updateDeal(
     updated_at: new Date().toISOString(),
   };
 
-  // Only apply the contact-log fields when the submitting form actually carries
-  // them, so a form that doesn't render them can never silently reset the
-  // attempt count to zero.
-  if (formData.has("contact_attempts")) {
-    update.contact_attempts = data.contact_attempts ?? 0;
+  // Only write the attempt count when a real number came through. A cleared or
+  // blank box coerces to null, and treating that as 0 would wipe a lead's whole
+  // outreach history the first time someone edited an unrelated field.
+  if (data.contact_attempts != null) {
+    update.contact_attempts = data.contact_attempts;
   }
   if (formData.has("last_contacted_at")) {
     update.last_contacted_at = data.last_contacted_at;
@@ -651,7 +651,9 @@ export async function logDealTouch(
 
   // Best-effort timeline entry — a failed log line must not lose the count.
   await supabase.from("activities").insert({
-    type: "call",
+    // 'note', not 'call' — the button doesn't know HOW they were reached, and
+    // logging every touch as a phone call would falsify the timeline.
+    type: "note",
     subject: `Contact attempt #${attempts}`,
     deal_id,
     contact_id: deal.contact_id,
@@ -684,10 +686,15 @@ export async function markDealLost(
   const { deal_id } = parsed.data;
   const supabase = await createClient();
 
+  // Key off the is_lost flag, not the label — statusForStage in this same file
+  // already does, and matching on the name would break the moment someone
+  // renames the stage.
   const { data: lostStage } = await supabase
     .from("pipeline_stages")
     .select("id")
-    .eq("name", "Lost")
+    .eq("is_lost", true)
+    .order("sort_order", { ascending: true })
+    .limit(1)
     .maybeSingle();
 
   const update: TablesUpdate<"deals"> = {
@@ -730,12 +737,22 @@ export async function deleteDeal(
   const { deal_id } = parsed.data;
   const supabase = await createClient();
 
-  const { data: linkedEvent } = await supabase
+  const { data: linkedEvent, error: probeError } = await supabase
     .from("events")
     .select("id, title")
     .eq("deal_id", deal_id)
     .limit(1)
     .maybeSingle();
+
+  // Fail CLOSED. This probe reads `events`, gated by its own module policy, so a
+  // user with crm-edit but no events-view sees zero rows. Silently reading that
+  // as "no booking" is exactly the orphaning the guard exists to prevent.
+  if (probeError) {
+    return {
+      error:
+        "Couldn't confirm whether this deal was already booked, so it wasn't deleted. Mark it lost instead, or ask an admin.",
+    };
+  }
 
   if (linkedEvent) {
     return {
@@ -754,8 +771,13 @@ export async function deleteDeal(
   // gone); deleting from the dashboard passes nothing and stays put so several
   // can be cleared in a row. Pattern-checked so the field can't become an
   // open redirect. redirect() throws — keep it out of any try/catch.
+  // Same-origin paths only. The leading-"//" check matters: "//127.0.0.1" (and
+  // its decimal-encoded forms) passes the character class but is a
+  // protocol-relative URL that leaves the site.
   const to = String(formData.get("redirect_to") ?? "");
-  if (to && /^\/[A-Za-z0-9/_-]*$/.test(to)) redirect(to);
+  if (to && !to.startsWith("//") && /^\/[A-Za-z0-9/_-]*$/.test(to)) {
+    redirect(to);
+  }
 
   return { success: true };
 }

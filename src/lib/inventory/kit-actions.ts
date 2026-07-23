@@ -7,7 +7,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getUser, requireEdit } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/inventory/types";
 import type { TablesUpdate } from "@/lib/database.types";
-import { optionalInt, optionalText, optionalUuid } from "@/lib/forms/coercions";
+import {
+  checkbox,
+  optionalInt,
+  optionalText,
+  optionalUuid,
+} from "@/lib/forms/coercions";
 
 /**
  * Server actions for inventory bundles ("kits") — the pallets a crew member
@@ -47,7 +52,7 @@ const CreateKitSchema = z.object(kitFields);
 const UpdateKitSchema = z.object({
   id: z.uuid("A bundle is required."),
   ...kitFields,
-  is_active: z.preprocess((v) => v === "on" || v === "true", z.boolean()),
+  is_active: checkbox,
 });
 const KitIdSchema = z.object({ id: z.uuid("A bundle is required.") });
 
@@ -101,7 +106,7 @@ export async function updateKit(
   const parsed = UpdateKitSchema.safeParse({
     id: formData.get("id"),
     ...kitFieldsFrom(formData),
-    is_active: formData.get("is_active") ?? "false",
+    is_active: formData.get("is_active"),
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
 
@@ -186,6 +191,37 @@ export async function addKitLine(
   const quantity = unit_id ? 1 : Math.max(1, parsed.data.quantity ?? 1);
 
   const supabase = await createClient();
+
+  const { data: item, error: itemError } = await supabase
+    .from("inventory_items")
+    .select("kind, name")
+    .eq("id", item_id)
+    .maybeSingle();
+  if (itemError) return { error: itemError.message };
+  if (!item) return { error: "That item no longer exists." };
+
+  // Serialized stock carries no bulk quantity (inventory_items.quantity stays 0
+  // for it), so an unpinned serialized line could never actually be reserved —
+  // the pallet would quietly go out without its machine. Require the unit.
+  if (item.kind === "serialized" && !unit_id) {
+    return {
+      error: `${item.name} is tracked by unit — pick which specific one belongs to this bundle.`,
+    };
+  }
+
+  // The unit must belong to the item it's filed under, or the reservation it
+  // creates would pair the wrong asset tag with the wrong item on the pick list.
+  if (unit_id) {
+    const { data: unit, error: unitError } = await supabase
+      .from("inventory_units")
+      .select("id")
+      .eq("id", unit_id)
+      .eq("item_id", item_id)
+      .maybeSingle();
+    if (unitError) return { error: unitError.message };
+    if (!unit) return { error: "That unit doesn't belong to that item." };
+  }
+
   const { error } = await supabase
     .from("inventory_kit_items")
     .insert({ kit_id, item_id, unit_id, quantity });
@@ -307,10 +343,36 @@ export async function assignItemsToKit(
   if (readError) return { error: readError.message };
 
   const already = new Set((existing ?? []).map((r) => r.item_id));
-  const toAdd = item_ids.filter((id) => !already.has(id));
+
+  // Serialized items are excluded: they need a SPECIFIC unit pinned (see
+  // addKitLine), which a bulk selection can't choose. Adding them here would
+  // create lines that can never be reserved.
+  const { data: serializedRows, error: kindError } = await supabase
+    .from("inventory_items")
+    .select("id, name")
+    .in("id", item_ids)
+    .eq("kind", "serialized");
+  if (kindError) return { error: kindError.message };
+  const serialized = new Set((serializedRows ?? []).map((r) => r.id));
+
+  const toAdd = item_ids.filter((id) => !already.has(id) && !serialized.has(id));
+
+  const notes: string[] = [];
+  const skippedExisting = item_ids.filter((id) => already.has(id)).length;
+  if (skippedExisting > 0) {
+    notes.push(`${skippedExisting} already in the bundle`);
+  }
+  if (serialized.size > 0) {
+    notes.push(
+      `${serialized.size} tracked by unit — add ${serialized.size === 1 ? "it" : "them"} on the bundle page to pick the exact unit`,
+    );
+  }
 
   if (toAdd.length === 0) {
-    return { success: true, warning: "Those items are already in that bundle." };
+    return {
+      success: true,
+      warning: notes.length > 0 ? `Nothing added: ${notes.join("; ")}.` : undefined,
+    };
   }
 
   const { error } = await supabase
@@ -320,12 +382,11 @@ export async function assignItemsToKit(
   if (error) return { error: error.message };
 
   revalidateKits(kit_id);
-  const skipped = item_ids.length - toAdd.length;
   return {
     success: true,
     warning:
-      skipped > 0
-        ? `Added ${toAdd.length}. ${skipped} already in the bundle.`
+      notes.length > 0
+        ? `Added ${toAdd.length}. Skipped ${notes.join("; ")}.`
         : undefined,
   };
 }

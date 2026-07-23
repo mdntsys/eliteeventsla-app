@@ -48,7 +48,7 @@ export function StaleLeadActions({
           onSubmit={(e) => {
             if (
               !window.confirm(
-                `Delete “${dealTitle}”? This removes the lead and its notes for good. Its contact is kept. This can't be undone.`,
+                `Delete “${dealTitle}”? This permanently removes the lead and every call, email, and note logged against it, including from the contact's timeline. The contact record itself is kept. This can't be undone.`,
               )
             ) {
               e.preventDefault();
