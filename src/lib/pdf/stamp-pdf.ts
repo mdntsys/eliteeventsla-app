@@ -7,6 +7,8 @@ import {
   type PDFFont,
   type PDFPage,
 } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { GREAT_VIBES_TTF_BASE64 } from "./fonts/great-vibes-data";
 
 /**
  * Stamp a signature onto an uploaded (externally-authored) PDF and append a
@@ -124,10 +126,21 @@ export async function stampAndCertifyPdf(
   info: SignInfo,
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.load(sourceBytes);
+  pdf.registerFontkit(fontkit);
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  // Oblique reads as a "signature" against the surrounding upright body text.
-  const script = await pdf.embedFont(StandardFonts.HelveticaOblique);
+  // A script face so the typed signature reads as a signature (close to the
+  // handwriting style already on these documents). Subset-embedded to keep the
+  // executed PDF small; falls back to oblique if the font can't be embedded.
+  let signature: PDFFont;
+  try {
+    signature = await pdf.embedFont(
+      Buffer.from(GREAT_VIBES_TTF_BASE64, "base64"),
+      { subset: true },
+    );
+  } catch {
+    signature = await pdf.embedFont(StandardFonts.HelveticaOblique);
+  }
 
   const name = safe(info.name);
   const dateStr = pacificDate(info.signedAt);
@@ -141,7 +154,7 @@ export async function stampAndCertifyPdf(
       x: spec.name.x * width,
       y: height - spec.name.y * height,
       size: spec.name.size,
-      font: script,
+      font: signature,
       color: INK,
     });
     if (spec.date) {
@@ -154,7 +167,7 @@ export async function stampAndCertifyPdf(
       });
     }
   } else {
-    appendSignaturePage(pdf, { helv, helvBold, script }, name, info, dateStr);
+    appendSignaturePage(pdf, { helv, helvBold, signature }, name, info, dateStr);
   }
 
   appendCertificate(pdf, { helv, helvBold }, info);
@@ -162,7 +175,7 @@ export async function stampAndCertifyPdf(
   return pdf.save();
 }
 
-type Fonts = { helv: PDFFont; helvBold: PDFFont; script: PDFFont };
+type Fonts = { helv: PDFFont; helvBold: PDFFont; signature: PDFFont };
 
 function appendSignaturePage(
   pdf: PDFDocument,
@@ -192,7 +205,7 @@ function appendSignaturePage(
     color: MUTED,
   });
   y -= 26;
-  page.drawText(name, { x: left, y, size: 24, font: fonts.script, color: INK });
+  page.drawText(name, { x: left, y, size: 34, font: fonts.signature, color: INK });
   y -= 10;
   page.drawLine({
     start: { x: left, y },

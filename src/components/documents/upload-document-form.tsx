@@ -158,7 +158,7 @@ export function UploadDocumentForm() {
                   <Num label="Page #" name="sig_page" placeholder="6" />
                   <Num label="Across %" name="name_x" placeholder="30" />
                   <Num label="Down %" name="name_y" placeholder="34" />
-                  <Num label="Size (pt)" name="name_size" placeholder="15" />
+                  <Num label="Size (pt)" name="name_size" placeholder="20" />
                 </div>
                 <p className="mt-4 text-xs font-medium text-navy">
                   Date stamp (optional)

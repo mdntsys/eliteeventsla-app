@@ -555,7 +555,7 @@ function buildSpecFromForm(formData: FormData): SignatureSpec | { error: string 
   }
   const spec: SignatureSpec = {
     page,
-    name: { x: nx, y: ny, size: sizeField(formData, "name_size", 15) },
+    name: { x: nx, y: ny, size: sizeField(formData, "name_size", 20) },
   };
   const dx = pctField(formData, "date_x");
   const dy = pctField(formData, "date_y");
