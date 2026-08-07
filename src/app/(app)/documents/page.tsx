@@ -21,12 +21,20 @@ export default async function DocumentsPage() {
         description="Every contract and SOW — draft, sent, viewed, and signed."
         action={
           canEdit(profile, "documents") ? (
-            <Link
-              href="/documents/new"
-              className="rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90"
-            >
-              New SOW
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href="/documents/upload"
+                className="rounded-(--radius-card) border border-line px-4 py-2 text-sm font-medium text-navy transition hover:border-navy"
+              >
+                Upload document
+              </Link>
+              <Link
+                href="/documents/new"
+                className="rounded-(--radius-card) bg-navy px-4 py-2 text-sm font-medium text-cream transition hover:opacity-90"
+              >
+                New SOW
+              </Link>
+            </div>
           ) : undefined
         }
       />

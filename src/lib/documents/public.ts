@@ -21,7 +21,7 @@ export async function getDocumentByToken(
   const { data, error } = await db
     .from("documents")
     .select(
-      "id, kind, title, status, signer_name, signer_email, payload, token_expires_at, signed_at",
+      "id, kind, title, status, signer_name, signer_email, payload, source_path, token_expires_at, signed_at",
     )
     .eq("sign_token", token)
     .maybeSingle();

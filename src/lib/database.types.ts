@@ -691,11 +691,13 @@ export type Database = {
           payload: Json
           sign_token: string | null
           signature_name: string | null
+          signature_spec: Json | null
           signed_at: string | null
           signer_email: string | null
           signer_ip: string | null
           signer_name: string | null
           signer_user_agent: string | null
+          source_path: string | null
           status: Database["public"]["Enums"]["document_status"]
           storage_path: string | null
           title: string
@@ -716,11 +718,13 @@ export type Database = {
           payload?: Json
           sign_token?: string | null
           signature_name?: string | null
+          signature_spec?: Json | null
           signed_at?: string | null
           signer_email?: string | null
           signer_ip?: string | null
           signer_name?: string | null
           signer_user_agent?: string | null
+          source_path?: string | null
           status?: Database["public"]["Enums"]["document_status"]
           storage_path?: string | null
           title: string
@@ -741,11 +745,13 @@ export type Database = {
           payload?: Json
           sign_token?: string | null
           signature_name?: string | null
+          signature_spec?: Json | null
           signed_at?: string | null
           signer_email?: string | null
           signer_ip?: string | null
           signer_name?: string | null
           signer_user_agent?: string | null
+          source_path?: string | null
           status?: Database["public"]["Enums"]["document_status"]
           storage_path?: string | null
           title?: string

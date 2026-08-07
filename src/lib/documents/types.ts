@@ -63,6 +63,8 @@ export type PublicDocument = {
   signer_name: string | null;
   signer_email: string | null;
   payload: unknown;
+  /** Set on uploaded-PDF documents — the original file the signer reads. */
+  source_path: string | null;
   token_expires_at: string | null;
   /** Computed in the loader (keeps Date.now() out of the render path). */
   token_expired: boolean;

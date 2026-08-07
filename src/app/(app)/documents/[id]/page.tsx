@@ -69,9 +69,12 @@ export default async function DocumentDetailPage({
   const doc = await getDocument(id);
   if (!doc) notFound();
 
-  const [audit, signedUrl] = await Promise.all([
+  const [audit, signedUrl, sourceUrl] = await Promise.all([
     listDocumentAudit(id),
     getSignedDocumentUrl(doc.storage_path),
+    doc.source_path
+      ? getSignedDocumentUrl(doc.source_path)
+      : Promise.resolve(null),
   ]);
 
   return (
@@ -89,7 +92,11 @@ export default async function DocumentDetailPage({
             <Field label="Status">
               {STATUS_LABELS[doc.status] ?? doc.status}
             </Field>
-            <Field label="Kind">{KIND_LABELS[doc.kind] ?? doc.kind}</Field>
+            <Field label="Kind">
+              {doc.source_path
+                ? "Uploaded document"
+                : (KIND_LABELS[doc.kind] ?? doc.kind)}
+            </Field>
             <Field label="Signer name">{doc.signer_name ?? "—"}</Field>
             <Field label="Signer email">{doc.signer_email ?? "—"}</Field>
             <Field label="Signed at">{formatDateTime(doc.signed_at)}</Field>
@@ -107,6 +114,30 @@ export default async function DocumentDetailPage({
             )}
           </div>
         </section>
+
+        {doc.source_path && (
+          <section className="rounded-(--radius-card) border border-line bg-card p-6">
+            <div className="mb-5">
+              <h2 className="font-display text-lg font-light text-navy">
+                Document preview
+              </h2>
+              <p className="text-sm text-muted">
+                {doc.status === "signed"
+                  ? "The original that was sent. The executed copy (with the signature + certificate) is linked above."
+                  : "Exactly what the signer sees on the signing link. Send it once it looks right."}
+              </p>
+            </div>
+            {sourceUrl ? (
+              <iframe
+                src={sourceUrl}
+                title={doc.title}
+                className="h-[640px] w-full rounded-(--radius-card) border border-line bg-white"
+              />
+            ) : (
+              <p className="text-sm text-muted">Preview unavailable.</p>
+            )}
+          </section>
+        )}
 
         {doc.kind === "customer_sow" && (
           <section className="rounded-(--radius-card) border border-line bg-card p-6">

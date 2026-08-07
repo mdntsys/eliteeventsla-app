@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDocumentByToken } from "@/lib/documents/public";
+import { getSignedDocumentUrl } from "@/lib/documents/queries";
 import { markDocumentViewed } from "@/lib/documents/actions";
 import {
   affiliateContractClauses,
@@ -37,6 +38,13 @@ export default async function PublicSignPage({
     await markDocumentViewed(token);
   }
 
+  // Uploaded documents (a PDF the team supplied) are shown to the signer as the
+  // real PDF via a short-lived signed URL, not an HTML re-render of a payload.
+  const sourceUrl =
+    doc.source_path && !signed && !unavailable
+      ? await getSignedDocumentUrl(doc.source_path)
+      : null;
+
   return (
     <main className="mx-auto w-full max-w-[720px] px-4 py-10">
       <div className="overflow-hidden rounded-(--radius-card) border border-line bg-card">
@@ -61,7 +69,9 @@ export default async function PublicSignPage({
             </div>
           ) : (
             <>
-              {doc.kind === "affiliate_contract" ? (
+              {doc.source_path ? (
+                <UploadedDocView url={sourceUrl} title={doc.title} />
+              ) : doc.kind === "affiliate_contract" ? (
                 <ContractView payload={doc.payload as ContractPayload} />
               ) : doc.kind === "customer_sow" ? (
                 <SowDocumentView payload={doc.payload as SowPayload} />
@@ -116,6 +126,46 @@ function ContractView({ payload }: { payload: ContractPayload }) {
         ))}
       </div>
     </>
+  );
+}
+
+function UploadedDocView({
+  url,
+  title,
+}: {
+  url: string | null;
+  title: string;
+}) {
+  if (!url) {
+    return (
+      <p className="text-sm text-red-700">
+        This document is temporarily unavailable. Please contact {COMPANY.email}.
+      </p>
+    );
+  }
+  return (
+    <div>
+      <p className="text-sm text-ink">
+        Please review the full document below, then adopt your signature.
+      </p>
+      <iframe
+        src={url}
+        title={title}
+        className="mt-4 h-[600px] w-full rounded-(--radius-card) border border-line bg-white"
+      />
+      <p className="mt-2 text-xs text-muted">
+        Trouble viewing it?{" "}
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-navy underline-offset-2 hover:underline"
+        >
+          Open the PDF in a new tab
+        </a>
+        .
+      </p>
+    </div>
   );
 }
 

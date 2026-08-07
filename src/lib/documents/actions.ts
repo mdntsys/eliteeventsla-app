@@ -35,6 +35,7 @@ import {
   optionalMoney,
 } from "@/lib/forms/coercions";
 import type { ActionState } from "@/lib/documents/types";
+import type { SignatureSpec } from "@/lib/pdf/stamp-pdf";
 
 /**
  * Documents / e-signature server actions. Staff actions gate on
@@ -492,6 +493,158 @@ export async function updateSow(
   redirect(`/documents/${data.id}`);
 }
 
+/* ------------------------------------------------------------------ *
+ * Uploaded-PDF documents (kind='other' with a source_path). A staff user
+ * uploads a finished PDF and sends it to a third party to sign; at signing the
+ * signature is stamped onto it (see @/lib/pdf/stamp-pdf) and a Certificate of
+ * Completion is appended. Everything else reuses the generated-doc pipeline.
+ * ------------------------------------------------------------------ */
+
+const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB
+
+/** Stored signature_spec shape: fractions of the page (0..1) from the top-left. */
+const SpecSchema = z.object({
+  page: z.number().int().min(1),
+  name: z.object({ x: z.number(), y: z.number(), size: z.number() }),
+  date: z.object({ x: z.number(), y: z.number(), size: z.number() }).optional(),
+});
+
+/** Coerce a stored jsonb spec back to a SignatureSpec; null (append) if invalid. */
+function normalizeSpec(raw: unknown): SignatureSpec {
+  const r = SpecSchema.safeParse(raw);
+  return r.success ? r.data : null;
+}
+
+/** A percentage field (0..100) from the placement form → fraction, or error. */
+function pctField(form: FormData, key: string): number | null {
+  const raw = String(form.get(key) ?? "").trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return null;
+  return n / 100;
+}
+
+function sizeField(form: FormData, key: string, fallback: number): number {
+  const raw = String(form.get(key) ?? "").trim();
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 6 && n <= 48 ? n : fallback;
+}
+
+const UploadMetaSchema = z.object({
+  title: z.string().trim().min(1, "A title is required."),
+  signer_name: optionalText,
+  signer_email: z.union([z.email("Enter a valid email."), z.literal("")]).optional(),
+});
+
+/**
+ * Build the signature_spec from the placement form, or null for "append a
+ * signature page". Returns a string on validation error.
+ */
+function buildSpecFromForm(formData: FormData): SignatureSpec | { error: string } {
+  const mode = String(formData.get("placement") ?? "append");
+  if (mode !== "place") return null;
+
+  const page = Number(String(formData.get("sig_page") ?? "").trim());
+  if (!Number.isInteger(page) || page < 1) {
+    return { error: "Enter the page number the signature goes on." };
+  }
+  const nx = pctField(formData, "name_x");
+  const ny = pctField(formData, "name_y");
+  if (nx == null || ny == null) {
+    return { error: "Enter the signature position (across % and down %)." };
+  }
+  const spec: SignatureSpec = {
+    page,
+    name: { x: nx, y: ny, size: sizeField(formData, "name_size", 15) },
+  };
+  const dx = pctField(formData, "date_x");
+  const dy = pctField(formData, "date_y");
+  if (dx != null && dy != null) {
+    spec.date = { x: dx, y: dy, size: sizeField(formData, "date_size", 11) };
+  }
+  return spec;
+}
+
+/**
+ * Create an uploaded-PDF document from the upload form: validate the file, store
+ * the original in the private bucket, and insert a draft the team then sends for
+ * signature. The signer counter-signs the actual PDF; our side's signature (if
+ * any) is already in the uploaded file.
+ */
+export async function createUploadedDocument(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireEdit("documents");
+
+  const meta = UploadMetaSchema.safeParse({
+    title: formData.get("title"),
+    signer_name: formData.get("signer_name"),
+    signer_email: formData.get("signer_email"),
+  });
+  if (!meta.success) return { error: firstError(meta.error) };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { error: "Choose a PDF to upload." };
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    return { error: "That file is over 20 MB. Please upload a smaller PDF." };
+  }
+  const bytes = Buffer.from(await file.arrayBuffer());
+  if (bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
+    return { error: "That file isn't a PDF." };
+  }
+
+  const spec = buildSpecFromForm(formData);
+  if (spec && "error" in spec) return { error: spec.error };
+
+  const user = await getUser();
+  const supabase = await createClient();
+
+  const { data: doc, error: insErr } = await supabase
+    .from("documents")
+    .insert({
+      kind: "other",
+      title: meta.data.title,
+      status: "draft",
+      signer_name: meta.data.signer_name,
+      signer_email: meta.data.signer_email || null,
+      created_by: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (insErr || !doc) {
+    return { error: insErr?.message ?? "Could not create the document." };
+  }
+
+  const sourcePath = `${doc.id}/source.pdf`;
+  const { error: upErr } = await supabase.storage
+    .from("documents")
+    .upload(sourcePath, bytes, { contentType: "application/pdf", upsert: true });
+  if (upErr) {
+    // Roll back the orphan row so a failed upload leaves nothing behind.
+    await supabase.from("documents").delete().eq("id", doc.id);
+    return { error: "Could not store the uploaded PDF. Please try again." };
+  }
+
+  const { error: updErr } = await supabase
+    .from("documents")
+    .update({ source_path: sourcePath, signature_spec: spec })
+    .eq("id", doc.id);
+  if (updErr) return { error: updErr.message };
+
+  await supabase.from("document_audit").insert({
+    document_id: doc.id,
+    event: "created",
+    actor: user?.email ?? "system",
+  });
+
+  revalidatePath("/documents");
+  // redirect() throws to navigate — keep it outside any try/catch.
+  redirect(`/documents/${doc.id}`);
+}
+
 const IdSchema = z.object({ id: z.uuid("A document is required.") });
 
 /**
@@ -694,7 +847,45 @@ export async function signDocument(
   let sowPdf: Buffer | null = null;
 
   try {
-    if (doc.kind === "affiliate_contract") {
+    if (doc.source_path) {
+      // Uploaded PDF: stamp the signature onto the ORIGINAL and append a
+      // Certificate of Completion. The content hash anchors to the original
+      // bytes (what the signer actually saw and agreed to).
+      const { data: srcBlob, error: dlErr } = await db.storage
+        .from("documents")
+        .download(doc.source_path);
+      if (dlErr || !srcBlob) {
+        return { error: "Could not load the document to sign." };
+      }
+      const sourceBytes = new Uint8Array(await srcBlob.arrayBuffer());
+      const contentHash = createHash("sha256")
+        .update(Buffer.from(sourceBytes))
+        .digest("hex");
+      const { stampAndCertifyPdf } = await import("@/lib/pdf/stamp-pdf");
+      const executed = await stampAndCertifyPdf(
+        sourceBytes,
+        normalizeSpec(doc.signature_spec),
+        {
+          documentId: doc.id,
+          name: signatureName,
+          email: doc.signer_email,
+          signedAt,
+          ip,
+          userAgent,
+          contentHash,
+        },
+      );
+      const storagePath = `${doc.id}/signed.pdf`;
+      const { error: upErr } = await db.storage
+        .from("documents")
+        .upload(storagePath, Buffer.from(executed), {
+          contentType: "application/pdf",
+          upsert: true,
+        });
+      if (upErr) return { error: "Could not store the signed document." };
+      updates.content_hash = contentHash;
+      updates.storage_path = storagePath;
+    } else if (doc.kind === "affiliate_contract") {
       const payload: ContractPayload = {
         ...(doc.payload as ContractPayload),
         effectiveDate: signedAt.slice(0, 10),
