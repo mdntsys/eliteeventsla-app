@@ -257,6 +257,40 @@ export function sowSignedInternalEmail(p: {
   return { subject: `SOW signed: ${p.documentTitle}`, html, text };
 }
 
+/** To the signer after they sign an uploaded document — executed copy attached. */
+export function documentSignedClientEmail(p: {
+  recipientName?: string | null;
+  documentTitle: string;
+}): RenderedEmail {
+  const hi = p.recipientName ? `Hi ${p.recipientName},` : "Hello,";
+  const html = layout("Your signed document", `
+    <p ${P}>${hi}</p>
+    <p ${P}>Thank you — your signature on <strong>${p.documentTitle}</strong> has been recorded. A copy of the fully executed document, with a certificate of completion, is attached to this email for your records.</p>
+    <p ${P}>If you have any questions, just reply to this email and we'll be glad to help.</p>`);
+  const text = `${hi}\n\nThank you — your signature on ${p.documentTitle} has been recorded. A copy of the fully executed document, with a certificate of completion, is attached for your records.\n\nIf you have any questions, just reply to this email.`;
+  return { subject: `Signed: ${p.documentTitle}`, html, text };
+}
+
+/** To the internal team when someone signs an uploaded document. */
+export function documentSignedInternalEmail(p: {
+  documentTitle: string;
+  documentUrl: string;
+  signerName: string;
+  signerEmail?: string | null;
+  signedAt?: string | null;
+}): RenderedEmail {
+  const when = formatDate(p.signedAt);
+  const button = `<a href="${p.documentUrl}" style="display:inline-block;background:${NAVY};color:${CREAM};text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;font-size:15px;">Open the document →</a>`;
+  const html = layout("A document was signed", `
+    <p ${P}>Heads up — a document just came back signed. The executed copy is attached.</p>
+    <p ${META}>Document: <strong>${p.documentTitle}</strong></p>
+    <p ${META}>Signed by: <strong>${p.signerName}</strong>${p.signerEmail ? ` (${p.signerEmail})` : ""}</p>
+    ${when ? `<p ${META}>Signed: <strong>${when}</strong></p>` : ""}
+    <p style="margin:18px 0;">${button}</p>`);
+  const text = `A document just came back signed. The executed copy is attached.\n\nDocument: ${p.documentTitle}\nSigned by: ${p.signerName}${p.signerEmail ? ` (${p.signerEmail})` : ""}\n${when ? `Signed: ${when}\n` : ""}\nOpen the document: ${p.documentUrl}`;
+  return { subject: `Signed: ${p.documentTitle}`, html, text };
+}
+
 export function affiliateWelcomeEmail(p: {
   fullName?: string | null;
   email: string;

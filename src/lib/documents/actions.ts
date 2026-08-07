@@ -12,6 +12,9 @@ import {
   sendEmail,
   notifySowSignedToClient,
   notifySowSignedInternal,
+  notifyDocumentSignedToSigner,
+  notifyDocumentSignedInternal,
+  getDocumentTeamRecipients,
 } from "@/lib/email/send";
 import { signatureRequestEmail } from "@/lib/email/templates";
 import {
@@ -712,6 +715,9 @@ export async function sendDocument(
 
   const sent = await sendEmail({
     to: doc.signer_email,
+    // BCC the team so sales has inbox proof the request went out (same pattern
+    // as invoice sends). Configurable via DOCUMENT_TEAM_TO.
+    bcc: getDocumentTeamRecipients(),
     ...signatureRequestEmail({
       recipientName: doc.signer_name,
       documentTitle: doc.title,
@@ -845,6 +851,8 @@ export async function signDocument(
   let sowMediaConsent: boolean | null = null;
   // Executed SOW PDF, kept to attach to the client's copy email.
   let sowPdf: Buffer | null = null;
+  // Executed uploaded-document PDF, kept to attach to the signed-copy emails.
+  let uploadedPdf: Buffer | null = null;
 
   try {
     if (doc.source_path) {
@@ -876,9 +884,10 @@ export async function signDocument(
         },
       );
       const storagePath = `${doc.id}/signed.pdf`;
+      uploadedPdf = Buffer.from(executed);
       const { error: upErr } = await db.storage
         .from("documents")
-        .upload(storagePath, Buffer.from(executed), {
+        .upload(storagePath, uploadedPdf, {
           contentType: "application/pdf",
           upsert: true,
         });
@@ -1017,6 +1026,32 @@ export async function signDocument(
       mediaRelease: sowMediaConsent,
       signedAt,
     });
+  }
+
+  // On a signed uploaded document: email the signer their executed copy and
+  // notify the team, both with the executed PDF attached. Fire-and-forget.
+  if (doc.source_path) {
+    const filename = `Signed-${doc.title
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .slice(0, 80)}.pdf`;
+    const attachments = uploadedPdf
+      ? [{ filename, content: uploadedPdf }]
+      : undefined;
+    await notifyDocumentSignedToSigner(
+      doc.signer_email,
+      { recipientName: doc.signer_name, documentTitle: doc.title },
+      attachments,
+    );
+    await notifyDocumentSignedInternal(
+      {
+        documentId: doc.id,
+        documentTitle: doc.title,
+        signerName: signatureName,
+        signerEmail: doc.signer_email,
+        signedAt,
+      },
+      attachments,
+    );
   }
 
   revalidatePath("/documents");

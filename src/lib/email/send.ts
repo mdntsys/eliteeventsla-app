@@ -13,6 +13,8 @@ import {
   payoutRecordedEmail,
   sowSignedClientEmail,
   sowSignedInternalEmail,
+  documentSignedClientEmail,
+  documentSignedInternalEmail,
   type RenderedEmail,
 } from "@/lib/email/templates";
 
@@ -279,4 +281,56 @@ export async function notifySowSignedInternal(p: {
   if (to.length === 0) return;
   const documentUrl = `${appBaseUrl()}/documents/${p.documentId}`;
   await sendEmail({ to, ...sowSignedInternalEmail({ ...p, documentUrl }) });
+}
+
+/**
+ * Team copy list for documents: who gets BCC'd on a signature request and
+ * notified (with the executed PDF) when an uploaded document is signed. Defaults
+ * to the sales team; override with DOCUMENT_TEAM_TO (comma-separated), or
+ * DOCUMENT_TEAM_TO="" to disable.
+ */
+export function getDocumentTeamRecipients(): string[] {
+  const raw = process.env.DOCUMENT_TEAM_TO;
+  const value = raw === undefined ? "sales@eliteeventsla.com" : raw;
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Email the signer their executed copy of an uploaded document (PDF attached).
+ * Fire-and-forget — swallows its own errors so signing never breaks.
+ */
+export async function notifyDocumentSignedToSigner(
+  to: string | null | undefined,
+  p: { recipientName?: string | null; documentTitle: string },
+  attachments?: EmailAttachment[],
+): Promise<void> {
+  if (!to) return;
+  await sendEmail({ to, ...documentSignedClientEmail(p), attachments });
+}
+
+/**
+ * Notify the internal team that an uploaded document was signed, with a link and
+ * the executed PDF attached. Fire-and-forget — swallows its own errors.
+ */
+export async function notifyDocumentSignedInternal(
+  p: {
+    documentId: string;
+    documentTitle: string;
+    signerName: string;
+    signerEmail?: string | null;
+    signedAt?: string | null;
+  },
+  attachments?: EmailAttachment[],
+): Promise<void> {
+  const to = getDocumentTeamRecipients();
+  if (to.length === 0) return;
+  const documentUrl = `${appBaseUrl()}/documents/${p.documentId}`;
+  await sendEmail({
+    to,
+    ...documentSignedInternalEmail({ ...p, documentUrl }),
+    attachments,
+  });
 }
