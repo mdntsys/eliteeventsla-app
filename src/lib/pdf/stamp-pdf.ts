@@ -130,13 +130,15 @@ export async function stampAndCertifyPdf(
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
   // A script face so the typed signature reads as a signature (close to the
-  // handwriting style already on these documents). Subset-embedded to keep the
-  // executed PDF small; falls back to oblique if the font can't be embedded.
+  // handwriting style already on these documents). Embedded WITHOUT subsetting:
+  // @pdf-lib/fontkit's subsetter mangles Great Vibes' glyph mapping (every letter
+  // renders as "a"), so we embed the full font (~0.4 MB, once per executed PDF —
+  // fine for a document). Falls back to oblique if the font can't be embedded.
   let signature: PDFFont;
   try {
     signature = await pdf.embedFont(
       Buffer.from(GREAT_VIBES_TTF_BASE64, "base64"),
-      { subset: true },
+      { subset: false },
     );
   } catch {
     signature = await pdf.embedFont(StandardFonts.HelveticaOblique);
