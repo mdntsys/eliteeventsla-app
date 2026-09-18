@@ -75,6 +75,15 @@ export function InviteForm() {
           </select>
         </label>
 
+        <label className="flex items-center gap-2 text-sm text-ink sm:col-span-3">
+          <input
+            type="checkbox"
+            name="superAdmin"
+            className="h-4 w-4 accent-navy"
+          />
+          Super Admin — full access to every area, including Team
+        </label>
+
         {state?.error && (
           <p role="alert" className="text-sm text-red-700 sm:col-span-3">
             {state.error}
@@ -107,7 +116,9 @@ export function InviteForm() {
           <p className="mt-3 text-xs text-muted">
             Creates the account and emails the person a branded welcome with a
             temporary password and a sign-in link. They change it from Account →
-            Change password. Pick a role now or leave it pending.
+            Change password. Pick a role now or leave it pending. Super Admin is
+            the only way onto the Team console and bypasses per-area
+            restrictions.
           </p>
         </Modal>
       )}

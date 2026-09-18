@@ -242,6 +242,7 @@ const InviteSchema = z.object({
   role: z
     .union([roleEnum, z.literal("")])
     .transform((v) => (v === "" ? null : v)),
+  superAdmin: z.boolean(),
 });
 
 /**
@@ -268,10 +269,11 @@ export async function inviteUser(
     email: formData.get("email"),
     fullName: formData.get("fullName") ?? "",
     role: formData.get("role") ?? "",
+    superAdmin: formData.get("superAdmin") === "on",
   });
   if (!parsed.success) return { error: firstError(parsed.error) };
 
-  const { email, fullName, role } = parsed.data;
+  const { email, fullName, role, superAdmin } = parsed.data;
 
   let service: ReturnType<typeof createServiceClient>;
   try {
@@ -293,14 +295,21 @@ export async function inviteUser(
     return { error: exists ? "That email already has an account." : error.message };
   }
 
-  // Set role + name via the SUPER ADMIN's session (RLS + the privilege trigger
-  // allow it; the service client would be blocked since it has no auth.uid()).
+  // Set role + name + super-admin via the SUPER ADMIN's session (RLS + the
+  // privilege trigger allow it; the service client would be blocked since it
+  // has no auth.uid()). Super-admin bypasses every area check AND is the only
+  // way to open the Team console — grant it only when the inviter asked.
   const newId = created?.user?.id;
-  if (newId && (role || fullName)) {
+  if (newId && (role || fullName || superAdmin)) {
     const supabase = await createClient();
-    const update: { role?: AppRole; full_name?: string } = {};
+    const update: {
+      role?: AppRole;
+      full_name?: string;
+      is_super_admin?: boolean;
+    } = {};
     if (role) update.role = role;
     if (fullName) update.full_name = fullName;
+    if (superAdmin) update.is_super_admin = true;
     await supabase.from("profiles").update(update).eq("id", newId);
   }
 
